@@ -39,7 +39,9 @@ import {
   UserCheck,
   TrendingUp,
   X,
-  Settings
+  Settings,
+  Edit3,
+  Save
 } from 'lucide-react';
 
 // Brand icons as inline SVGs
@@ -134,6 +136,9 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
   const [showDrawer, setShowDrawer] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
+  const [showEditStudentModal, setShowEditStudentModal] = useState(false);
+  const [editStudentData, setEditStudentData] = useState<any>(null);
+  const [editStudentSaving, setEditStudentSaving] = useState(false);
   const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
   const [emailMsg, setEmailMsg] = useState({ type: '', text: '' });
 
@@ -408,6 +413,29 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
       setTimeout(() => setEmailMsg({ type: '', text: '' }), 4000);
     } finally {
       setSendingEmailId(null);
+    }
+  };
+
+  const handleUpdateStudentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editStudentData) return;
+    setEditStudentSaving(true);
+    try {
+      const res = await apiRequest(`/students/${editStudentData._id}`, {
+        method: 'PUT',
+        body: JSON.stringify(editStudentData)
+      });
+      // Update local states
+      setStudents(students.map(s => s._id === editStudentData._id ? res.data : s));
+      if (selectedStudent && selectedStudent._id === editStudentData._id) {
+        setSelectedStudent(res.data);
+      }
+      setShowEditStudentModal(false);
+      setEditStudentData(null);
+    } catch (err: any) {
+      alert('Failed to update student: ' + (err.message || 'Unknown error'));
+    } finally {
+      setEditStudentSaving(false);
     }
   };
 
@@ -1057,6 +1085,13 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                           </button>
                         )}
                         <button
+                          onClick={() => { setEditStudentData(student); setShowEditStudentModal(true); }}
+                          className="p-2 hover:bg-slate-800 rounded-xl text-emerald-400 hover:text-emerald-300 transition-colors inline-flex items-center gap-1.5 text-xs font-semibold"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                          <span>Edit</span>
+                        </button>
+                        <button
                           onClick={() => { setSelectedStudent(student); setShowDrawer(true); }}
                           className="p-2 hover:bg-slate-800 rounded-xl text-indigo-400 hover:text-indigo-300 transition-colors inline-flex items-center gap-1.5 text-xs font-semibold"
                         >
@@ -1512,6 +1547,153 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
           </div>
         </div>
       )}
+
+      {/* Edit Student Modal */}
+      {showEditStudentModal && editStudentData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div onClick={() => setShowEditStudentModal(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+          
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl w-full max-w-xl relative z-10 overflow-hidden">
+            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white">Edit Student Data</h3>
+              <button 
+                onClick={() => setShowEditStudentModal(false)}
+                className="h-8 w-8 rounded-lg bg-slate-950/40 text-slate-400 hover:text-slate-100 flex items-center justify-center border border-slate-800 hover:border-slate-700 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleUpdateStudentSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editStudentData.name}
+                    onChange={e => setEditStudentData({...editStudentData, name: e.target.value})}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={editStudentData.email}
+                    onChange={e => setEditStudentData({...editStudentData, email: e.target.value})}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Phone Number</label>
+                  <input
+                    type="text"
+                    value={editStudentData.phoneNumber || ''}
+                    onChange={e => setEditStudentData({...editStudentData, phoneNumber: e.target.value})}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Tier Status</label>
+                  <select
+                    value={editStudentData.tier}
+                    onChange={e => setEditStudentData({...editStudentData, tier: e.target.value})}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                  >
+                    <option value="Tier A">Tier A</option>
+                    <option value="Tier B">Tier B</option>
+                    <option value="Tier C">Tier C</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Risk Status</label>
+                  <select
+                    value={editStudentData.riskStatus}
+                    onChange={e => setEditStudentData({...editStudentData, riskStatus: e.target.value})}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Hired Status</label>
+                  <select
+                    value={editStudentData.hiredStatus}
+                    onChange={e => setEditStudentData({...editStudentData, hiredStatus: e.target.value})}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                  >
+                    <option value="Looking">Looking</option>
+                    <option value="In Job task">In Job task</option>
+                    <option value="In interview">In interview</option>
+                    <option value="On Process">On Process</option>
+                    <option value="Hired">Hired</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">GitHub URL</label>
+                  <input
+                    type="text"
+                    value={editStudentData.profiles?.github || ''}
+                    onChange={e => setEditStudentData({...editStudentData, profiles: {...editStudentData.profiles, github: e.target.value}})}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">LinkedIn URL</label>
+                  <input
+                    type="text"
+                    value={editStudentData.profiles?.linkedin || ''}
+                    onChange={e => setEditStudentData({...editStudentData, profiles: {...editStudentData.profiles, linkedin: e.target.value}})}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Resume URL</label>
+                  <input
+                    type="text"
+                    value={editStudentData.profiles?.resume || ''}
+                    onChange={e => setEditStudentData({...editStudentData, profiles: {...editStudentData.profiles, resume: e.target.value}})}
+                    className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 mt-6 border-t border-slate-800 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowEditStudentModal(false)}
+                  className="px-5 py-2.5 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editStudentSaving}
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {editStudentSaving ? (
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -9,7 +9,8 @@ import {
   Sparkles, 
   LogOut, 
   User, 
-  BookOpen 
+  BookOpen,
+  ShieldCheck
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -27,6 +28,10 @@ export default function Sidebar({ userRole = 'mentor', userName = 'Mentor' }: Si
     { name: 'Quiz System', href: '/quiz', icon: BookOpen },
     { name: 'Placement AI', href: '/placement', icon: Sparkles },
   ];
+
+  if (userRole === 'admin') {
+    navItems.push({ name: 'Admin Panel', href: '/admin', icon: ShieldCheck });
+  }
 
   const handleLogout = () => {
     localStorage.removeItem('token');

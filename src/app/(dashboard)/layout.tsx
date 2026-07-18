@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Sidebar from '@/components/shared/Sidebar';
 import TopNav from '@/components/shared/TopNav';
 
@@ -14,6 +14,8 @@ export default function DashboardLayout({
   const [authenticated, setAuthenticated] = useState(false);
   const [user, setUser] = useState<any>({ name: 'Demo Mentor', role: 'mentor' });
 
+  const pathname = usePathname();
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
@@ -23,16 +25,23 @@ export default function DashboardLayout({
       return;
     }
 
-    setAuthenticated(true);
-
+    let parsedUser = null;
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
+        parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
       } catch (e) {
         // Ignore
       }
     }
-  }, [router]);
+
+    if (pathname === '/admin' && parsedUser?.role !== 'admin') {
+      router.push('/');
+      return;
+    }
+
+    setAuthenticated(true);
+  }, [router, pathname]);
 
   if (!authenticated) {
     return (

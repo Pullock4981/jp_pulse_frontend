@@ -19,6 +19,7 @@ import {
 export default function GlobalDashboard() {
   const [stats, setStats] = useState({
     totalProjects: 0,
+    totalMentors: 0,
     totalStudents: 0,
     totalHired: 0,
     placementRate: '0%',
@@ -29,9 +30,17 @@ export default function GlobalDashboard() {
   });
   
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState('mentor');
 
   useEffect(() => {
     fetchDashboardData();
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        setUserRole(parsed.role || 'mentor');
+      } catch (e) {}
+    }
   }, []);
 
   const fetchDashboardData = async () => {
@@ -43,6 +52,7 @@ export default function GlobalDashboard() {
       
       setStats({
         totalProjects: fetchedStats.totalProjects || 0,
+        totalMentors: fetchedStats.totalMentors || 0,
         totalStudents: fetchedStats.totalStudents || 0,
         totalHired: fetchedStats.totalHired || 0,
         placementRate: fetchedStats.placementRate || '0%',
@@ -56,6 +66,7 @@ export default function GlobalDashboard() {
       // Fallback Mock Data
       setStats({
         totalProjects: 2,
+        totalMentors: 5,
         totalStudents: 60,
         totalHired: 16,
         placementRate: '26.7%',
@@ -80,13 +91,34 @@ export default function GlobalDashboard() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">Global Dashboard</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">
+            {userRole === 'admin' ? 'Admin Global Dashboard' : 'Global Dashboard'}
+          </h1>
           <p className="text-slate-400 text-sm mt-1">High-level placement metrics and cohort oversight</p>
         </div>
       </div>
 
       {/* Global Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${userRole === 'admin' ? '5' : '4'} gap-6`}>
+        {/* Total Mentors (Admin Only) */}
+        {userRole === 'admin' && (
+          <div className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-3xl relative overflow-hidden backdrop-blur-sm group hover:border-slate-700/60 transition-all duration-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Total Mentors</p>
+                <h3 className="text-3xl font-bold text-white mt-2">{stats.totalMentors}</h3>
+              </div>
+              <div className="h-12 w-12 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                <ShieldAlert className="h-6 w-6" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-1.5 text-xs text-indigo-400 font-medium">
+              <ShieldAlert className="h-3.5 w-3.5" />
+              <span>Platform staff</span>
+            </div>
+          </div>
+        )}
+
         {/* Total Projects */}
         <div className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-3xl relative overflow-hidden backdrop-blur-sm group hover:border-slate-700/60 transition-all duration-300">
           <div className="flex items-center justify-between">
