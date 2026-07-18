@@ -193,6 +193,12 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
   const [importDetailsSheetUrl, setImportDetailsSheetUrl] = useState('');
   const [importDetailsMsg, setImportDetailsMsg] = useState({ type: '', text: '' });
 
+  // Bulk Add Import states
+  const [showBulkAddModal, setShowBulkAddModal] = useState(false);
+  const [bulkAddLoading, setBulkAddLoading] = useState(false);
+  const [bulkAddSheetUrl, setBulkAddSheetUrl] = useState('');
+  const [bulkAddMsg, setBulkAddMsg] = useState({ type: '', text: '' });
+
   // Form Builder inline edit state
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
 
@@ -674,25 +680,19 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
 
   // Save the custom fields configuration to the backend
   const handleSaveFormConfig = async () => {
-    // Verify email field exists (needed for student lookup)
-    if (!customFields.some(f => f.id === 'email')) {
-      alert('Your form must include an Email field to match students to their profiles.');
-      return;
-    }
-
     setFormSaving(true);
     try {
       const res = await apiRequest(`/projects/${projectId}/forms`, {
         method: 'PUT',
         body: JSON.stringify({ fields: customFields })
       });
-      if (res.success && res.data) {
+      if (res.success) {
         setFormConfig(res.data);
-        alert('Form customized and saved successfully!');
+        alert('Form configuration saved!');
         setShowFormBuilderModal(false);
       }
     } catch (err: any) {
-      alert('Failed to save form customization: ' + (err.message || 'Unknown error'));
+      alert('Failed to save form config: ' + (err.message || 'Unknown error'));
     } finally {
       setFormSaving(false);
     }
@@ -799,6 +799,100 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
       setImportDetailsMsg({ type: 'error', text: err.message || 'Failed connecting to placement pulse api.' });
     } finally {
       setImportDetailsLoading(false);
+    }
+  };
+
+  // ----------------------------------------------------
+  // Bulk Add Students Flow
+  // ----------------------------------------------------
+  const handleBulkAddFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setBulkAddLoading(true);
+    setBulkAddMsg({ type: 'info', text: 'Parsing spreadsheet file...' });
+
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = evt.target?.result;
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheet];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          
+          processBulkAddJson(jsonData);
+        } catch (err: any) {
+          setBulkAddMsg({ type: 'error', text: `Failed to parse Excel file: ${err.message}` });
+          setBulkAddLoading(false);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          processBulkAddJson(results.data);
+        },
+        error: (err) => {
+          setBulkAddMsg({ type: 'error', text: `Failed to parse CSV file: ${err.message}` });
+          setBulkAddLoading(false);
+        }
+      });
+    }
+  };
+
+  const processBulkAddJson = async (jsonData: any[]) => {
+    if (!jsonData || jsonData.length === 0) {
+      setBulkAddMsg({ type: 'error', text: 'Spreadsheet contains no data rows.' });
+      setBulkAddLoading(false);
+      return;
+    }
+
+    const newStudents: any[] = [];
+    jsonData.forEach((row: any) => {
+      let rowEmail = '';
+      let rowName = '';
+      Object.keys(row).forEach(k => {
+        const cleanK = k.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+        if (cleanK === 'email' || cleanK === 'mail' || cleanK === 'emailaddress') rowEmail = String(row[k]).trim();
+        if (cleanK === 'name' || cleanK === 'fullname' || cleanK === 'studentname') rowName = String(row[k]).trim();
+      });
+
+      if (rowEmail && rowName) {
+        newStudents.push({ name: rowName, email: rowEmail, activeStatus: 'Active', riskStatus: 'On Track', tier: 'Tier C' });
+      } else if (rowEmail && !rowName) {
+        newStudents.push({ name: rowEmail.split('@')[0], email: rowEmail, activeStatus: 'Active', riskStatus: 'On Track', tier: 'Tier C' });
+      }
+    });
+
+    if (newStudents.length === 0) {
+      setBulkAddMsg({ type: 'error', text: 'No valid rows with Name and Email could be extracted.' });
+      setBulkAddLoading(false);
+      return;
+    }
+
+    setBulkAddMsg({ type: 'info', text: `Adding ${newStudents.length} students...` });
+    try {
+      const res = await apiRequest(`/projects/${projectId}/students/bulk`, {
+        method: 'POST',
+        body: JSON.stringify({ students: newStudents })
+      });
+      if (res.success) {
+        setBulkAddMsg({ type: 'success', text: `Success! Added ${res.count} students.` });
+        const studRes = await apiRequest(`/projects/${projectId}/students`);
+        setStudents(studRes.data || []);
+      } else {
+        setBulkAddMsg({ type: 'error', text: res.message || 'Import failed.' });
+      }
+    } catch (err: any) {
+      setBulkAddMsg({ type: 'error', text: err.message || 'Failed connecting to server.' });
+    } finally {
+      setBulkAddLoading(false);
     }
   };
 
@@ -1461,6 +1555,13 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                   </>
                 )}
 
+                <button
+                  onClick={() => { setBulkAddMsg({ type: '', text: '' }); setShowBulkAddModal(true); }}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all flex items-center gap-2"
+                >
+                  <Plus className="h-3 w-3" /> Add Students
+                </button>
+
                 {statusFilter !== 'All' && (
                   <button 
                     onClick={() => setStatusFilter('All')}
@@ -1469,6 +1570,19 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                     Clear Filter
                   </button>
                 )}
+                {/* Status Filter Dropdown */}
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="text-xs font-semibold bg-slate-900 border border-slate-700 text-slate-300 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="All">All Students</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="Placed">Placed</option>
+                  <option value="Leave">Willingly Leave</option>
+                  <option value="At Risk">At Risk</option>
+                </select>
                 {/* Search box */}
                 <div className="relative w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
@@ -3297,6 +3411,67 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                 type="button"
                 onClick={() => setShowImportDetailsModal(false)}
                 className="bg-slate-950/40 border border-slate-850 hover:border-slate-700 text-slate-350 hover:text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Add Modal */}
+      {showBulkAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div onClick={() => setShowBulkAddModal(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+          
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl w-full max-w-lg relative z-10 overflow-hidden">
+            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-100">Add New Students (Bulk Import)</h3>
+                <p className="text-xs text-slate-500 mt-1">Upload an Excel or CSV file containing at least Name and Email.</p>
+              </div>
+              <button 
+                onClick={() => setShowBulkAddModal(false)}
+                className="h-8 w-8 rounded-lg bg-slate-950/40 text-slate-400 hover:text-white flex items-center justify-center border border-slate-800 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {bulkAddMsg.text && (
+                <div className={`p-4 rounded-xl text-xs font-semibold leading-relaxed flex items-start gap-2.5 ${
+                  bulkAddMsg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
+                  bulkAddMsg.type === 'error' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-450' :
+                  'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'
+                }`}>
+                  {bulkAddMsg.type === 'error' ? <XCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" /> : <CheckCircle2 className="h-4.5 w-4.5 shrink-0 mt-0.5" />}
+                  <span>{bulkAddMsg.text}</span>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Upload Spreadsheet (Excel/CSV)</label>
+                <div className="border border-dashed border-slate-700 hover:border-emerald-600 rounded-2xl p-6 text-center cursor-pointer relative bg-slate-950/30 transition-colors">
+                  <input
+                    type="file"
+                    disabled={bulkAddLoading}
+                    accept=".csv,.xlsx,.xls"
+                    onChange={handleBulkAddFileUpload}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                  <Users className="h-8 w-8 text-emerald-500/60 mx-auto mb-2" />
+                  <p className="text-xs font-semibold text-slate-300">Click or drag file to upload</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Requires 'Name' and 'Email' columns</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowBulkAddModal(false)}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition-colors"
               >
                 Close
               </button>

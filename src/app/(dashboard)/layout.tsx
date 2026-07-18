@@ -16,24 +16,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     let token = localStorage.getItem('token');
     let storedUser = localStorage.getItem('user');
 
-    if (!token) {
-      token = 'mock-bypass-token';
-      localStorage.setItem('token', token);
-    }
-    if (!storedUser) {
-      const defaultUser = { name: 'Demo Mentor', role: 'admin' };
-      localStorage.setItem('user', JSON.stringify(defaultUser));
-      setUser(defaultUser);
-    } else {
-      try {
-        const parsed = JSON.parse(storedUser);
-        setUser(parsed);
-      } catch { }
+    if (!token || !storedUser) {
+      router.push('/login');
+      return;
     }
 
-    const currentUser = storedUser ? JSON.parse(storedUser) : { role: 'admin' };
-    if (pathname === '/admin' && currentUser?.role !== 'admin') {
-      router.push('/');
+    try {
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      
+      if (pathname === '/admin' && parsedUser.role !== 'admin') {
+        router.push('/');
+        return;
+      }
+    } catch {
+      router.push('/login');
       return;
     }
 
