@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { apiRequest } from '@/utils/api';
 import Link from 'next/link';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { 
   Plus, 
   FolderPlus,
@@ -49,6 +50,8 @@ export default function ProjectsIndexPage() {
   const [fileName, setFileName] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
+  const [sheetUrl, setSheetUrl] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -110,41 +113,114 @@ export default function ProjectsIndexPage() {
     });
   };
 
-  // CSV Drag and drop file reading
+  // Helper to normalize rows from CSV/Excel/Google Sheet
+  const formatRows = (rows: any[]) => {
+    return rows.map((row: any) => {
+      const name = row.name || row.Name || row['Student Name'] || row['student name'] || row['Name'] || 'Unnamed Student';
+      const email = row.email || row.Email || row['Email Address'] || row['email address'] || row['Mail'] || row['mail'] || '';
+      const phoneNumber = row.phone || row.Phone || row.phoneNumber || row.PhoneNumber || row['Phone Number'] || row['phone number'] || row['Contact'] || row['contact'] || '';
+
+      return {
+        name,
+        email,
+        phoneNumber,
+        tier: row.tier || row.Tier || 'Tier C',
+        riskStatus: row.risk || row.Risk || 'On Track',
+        activeStatus: 'Active',
+        hiredStatus: row.hired || row.Hired || 'Looking',
+        profiles: {
+          resume: row.resume || row.Resume || '',
+          github: row.github || row.Github || '',
+          linkedin: row.linkedin || row.Linkedin || '',
+          resumeReady: !!(row.resume || row.Resume),
+          githubReady: !!(row.github || row.Github),
+          linkedinReady: !!(row.linkedin || row.Linkedin)
+        }
+      };
+    });
+  };
+
+  // CSV / Excel file reading
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setFileName(file.name);
+    setMsg({ type: '', text: '' });
+    setSheetUrl(''); // Reset Google sheet URL if file uploaded
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        // Map headers or fallback
-        const formatted = results.data.map((row: any) => ({
-          name: row.name || row.Name || 'Unnamed Student',
-          email: row.email || row.Email || '',
-          phoneNumber: row.phone || row.Phone || '',
-          tier: row.tier || row.Tier || 'Tier C',
-          riskStatus: row.risk || row.Risk || 'Low',
-          activeStatus: 'Active',
-          hiredStatus: row.hired || row.Hired || 'Looking',
-          profiles: {
-            resume: row.resume || row.Resume || '',
-            github: row.github || row.Github || '',
-            linkedin: row.linkedin || row.Linkedin || '',
-            resumeReady: !!row.resume,
-            githubReady: !!row.github,
-            linkedinReady: !!row.linkedin
+    const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+    if (isExcel) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          const formatted = formatRows(jsonData);
+          setStudentsList(formatted);
+        } catch (err: any) {
+          setMsg({ type: 'error', text: `Failed to parse Excel sheet: ${err.message}` });
+        }
+      };
+      reader.onerror = () => {
+        setMsg({ type: 'error', text: 'Failed to read Excel file.' });
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const formatted = formatRows(results.data);
+          setStudentsList(formatted);
+        },
+        error: (err) => {
+          setMsg({ type: 'error', text: `Failed to parse CSV sheet: ${err.message}` });
+        }
+      });
+    }
+  };
+
+  // Google Sheets integration via backend proxy
+  const handleGoogleSheetImport = async () => {
+    if (!sheetUrl) return;
+    setImportLoading(true);
+    setMsg({ type: '', text: '' });
+    setStudentsList([]);
+    setFileName('');
+
+    try {
+      const res = await apiRequest('/projects/import-sheet', {
+        method: 'POST',
+        body: JSON.stringify({ url: sheetUrl })
+      });
+
+      if (res.csvData) {
+        Papa.parse(res.csvData, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            const formatted = formatRows(results.data);
+            setStudentsList(formatted);
+            setFileName('Google Sheet (Synced)');
+            setMsg({ type: 'success', text: `Successfully loaded ${formatted.length} students from Google Sheet!` });
+          },
+          error: (err) => {
+            setMsg({ type: 'error', text: `Failed to parse Google Sheet content: ${err.message}` });
           }
-        }));
-        setStudentsList(formatted);
-      },
-      error: (err) => {
-        setMsg({ type: 'error', text: `Failed to parse sheet: ${err.message}` });
+        });
+      } else {
+        throw new Error('No spreadsheet data returned from backend.');
       }
-    });
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.message || 'Failed to connect/download Google Sheet. Double check sheet share settings.' });
+    } finally {
+      setImportLoading(false);
+    }
   };
 
   const handleCreateProjectSubmit = async (e: React.FormEvent) => {
@@ -193,15 +269,14 @@ export default function ProjectsIndexPage() {
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">Cohort Projects</h1>
-          <p className="text-slate-400 text-sm mt-1">Manage active batches and training projects</p>
+          <h1 className="text-3xl font-black tracking-tight gradient-text">Cohort Projects</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Manage active batches and training projects</p>
         </div>
-
         <button
           onClick={() => setShowModal(true)}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all duration-200 flex items-center gap-2 shadow-lg shadow-indigo-600/20 hover:shadow-indigo-500/30"
+          className="btn-primary flex items-center gap-2 cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           Create Project
@@ -209,87 +284,107 @@ export default function ProjectsIndexPage() {
       </div>
 
       {/* Stats Widgets */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-3xl backdrop-blur-sm">
-          <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider block">Active Batches</span>
-          <h3 className="text-3xl font-bold text-white mt-2">{stats.totalProjects}</h3>
-        </div>
-        <div className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-3xl backdrop-blur-sm">
-          <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider block">Total Students</span>
-          <h3 className="text-3xl font-bold text-white mt-2">{stats.totalStudents}</h3>
-        </div>
-        <div className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-3xl backdrop-blur-sm">
-          <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider block">Placed Ratio</span>
-          <h3 className="text-3xl font-bold text-emerald-450 mt-2">{stats.placementRate}</h3>
-        </div>
-        <div className="bg-slate-900/40 border border-slate-800/80 p-6 rounded-3xl backdrop-blur-sm">
-          <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider block">Active Enrolled</span>
-          <h3 className="text-3xl font-bold text-white mt-2">{stats.totalActive}</h3>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Active Batches', value: stats.totalProjects, color: 'linear-gradient(135deg, #7c3aed, #a78bfa)' },
+          { label: 'Total Students', value: stats.totalStudents, color: 'linear-gradient(135deg, #d946ef, #e879f9)' },
+          { label: 'Placed Ratio', value: stats.placementRate, color: 'linear-gradient(135deg, #10b981, #34d399)' },
+          { label: 'Active Enrolled', value: stats.totalActive, color: 'linear-gradient(135deg, #f97316, #fb923c)' },
+        ].map(stat => (
+          <div key={stat.label} className="stat-card">
+            <span className="text-[10px] font-black uppercase tracking-widest block mb-2" style={{ color: 'var(--text-faint)' }}>{stat.label}</span>
+            <h3 className="text-3xl font-black" style={{ background: stat.color, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+              {stat.value}
+            </h3>
+          </div>
+        ))}
       </div>
 
       {/* Projects List Section */}
       <div className="space-y-4">
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="h-48 bg-slate-900/20 border border-slate-800 animate-pulse rounded-3xl"></div>
-            <div className="h-48 bg-slate-900/20 border border-slate-800 animate-pulse rounded-3xl"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="h-52 rounded-3xl skeleton" />
+            <div className="h-52 rounded-3xl skeleton" />
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="glass-card p-16 text-center">
+            <div className="h-16 w-16 mx-auto rounded-3xl mb-4 flex items-center justify-center"
+              style={{ background: 'var(--brand-gradient-soft)', border: '1px solid var(--surface-border)' }}>
+              <FolderPlus className="h-8 w-8" style={{ color: 'var(--brand-primary)' }} />
+            </div>
+            <h3 className="text-lg font-bold mb-2" style={{ color: 'var(--foreground)' }}>No projects yet</h3>
+            <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Create your first cohort project to get started tracking placement progress.</p>
+            <button onClick={() => setShowModal(true)} className="btn-primary">Create First Project</button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {projects.map((project) => (
-              <div 
-                key={project._id}
-                className="bg-slate-900/30 border border-slate-800/80 hover:border-slate-800 rounded-3xl p-6 flex flex-col justify-between hover:bg-slate-900/50 hover:shadow-xl transition-all duration-300"
-              >
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-400 bg-indigo-600/15 border border-indigo-500/20 px-2.5 py-1 rounded-full">
-                        {project.batch}
-                      </span>
-                      <h3 className="text-xl font-bold text-white mt-3">{project.name}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {projects.map((project, idx) => {
+              const placementRate = project.totalStudents > 0
+                ? ((project.totalHired / project.totalStudents) * 100).toFixed(0) + '%' : '0%';
+              const gradients = [
+                'linear-gradient(135deg, #7c3aed, #d946ef)',
+                'linear-gradient(135deg, #d946ef, #f97316)',
+                'linear-gradient(135deg, #f97316, #7c3aed)',
+              ];
+              const cardGrad = gradients[idx % gradients.length];
+              return (
+                <div
+                  key={project._id}
+                  className="glass-card p-6 flex flex-col justify-between group transition-all duration-300 hover:-translate-y-1"
+                >
+                  <div>
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 rounded-2xl flex items-center justify-center shrink-0 text-white font-black text-lg shadow-lg"
+                          style={{ background: cardGrad }}>
+                          {project.name[0]}
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full"
+                            style={{ color: 'var(--brand-primary)', background: 'var(--brand-gradient-soft)', border: '1px solid var(--surface-border)' }}>
+                            {project.batch}
+                          </span>
+                          <h3 className="text-base font-black mt-1" style={{ color: 'var(--foreground)' }}>{project.name}</h3>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <p className="text-slate-400 text-xs mt-2 line-clamp-2 leading-relaxed">
-                    {project.description || 'No description provided.'}
-                  </p>
-                </div>
-
-                <div className="border-t border-slate-800/60 mt-6 pt-6 grid grid-cols-4 gap-2 text-center">
-                  <div>
-                    <span className="text-[9px] uppercase font-bold tracking-wider text-slate-500 block">Students</span>
-                    <p className="text-sm font-extrabold text-slate-200 mt-1">{project.totalStudents}</p>
-                  </div>
-                  <div>
-                    <span className="text-[9px] uppercase font-bold tracking-wider text-slate-500 block">Avg. Attendance</span>
-                    <p className="text-sm font-extrabold text-slate-200 mt-1">{project.avgAttendanceRate.toFixed(1)}%</p>
-                  </div>
-                  <div>
-                    <span className="text-[9px] uppercase font-bold tracking-wider text-slate-500 block">Placed Rate</span>
-                    <p className="text-sm font-extrabold text-emerald-400 mt-1">
-                      {project.totalStudents > 0 ? ((project.totalHired / project.totalStudents) * 100).toFixed(0) + '%' : '0%'}
+                    <p className="text-xs leading-relaxed line-clamp-2 mb-5" style={{ color: 'var(--text-muted)' }}>
+                      {project.description || 'No description provided.'}
                     </p>
                   </div>
-                  <div>
-                    <span className="text-[9px] uppercase font-bold tracking-wider text-slate-500 block">Active Ratio</span>
-                    <p className="text-sm font-extrabold text-indigo-400 mt-1">
-                      {project.totalStudents > 0 ? (((project.totalStudents - project.totalHired) / project.totalStudents) * 100).toFixed(0) + '%' : '100%'}
-                    </p>
-                  </div>
-                </div>
 
-                <div className="mt-6 flex items-center justify-end gap-3">
+                  <div className="border-t pt-4 grid grid-cols-4 gap-2 text-center mb-5" style={{ borderColor: 'var(--surface-border)' }}>
+                    {[
+                      { label: 'Students', value: project.totalStudents, color: 'var(--foreground)' },
+                      { label: 'Attendance', value: project.avgAttendanceRate.toFixed(0) + '%', color: '#3b82f6' },
+                      { label: 'Placed', value: placementRate, color: '#10b981' },
+                      { label: 'Active', value: project.totalStudents > 0 ? (((project.totalStudents - project.totalHired) / project.totalStudents) * 100).toFixed(0) + '%' : '100%', color: 'var(--brand-primary)' },
+                    ].map(stat => (
+                      <div key={stat.label}>
+                        <span className="text-[9px] font-black uppercase tracking-widest block" style={{ color: 'var(--text-faint)' }}>{stat.label}</span>
+                        <p className="text-sm font-black mt-1" style={{ color: stat.color }}>{stat.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
                   <Link
                     href={`/projects/${project._id}`}
-                    className="flex items-center gap-1.5 bg-slate-850 hover:bg-slate-800 text-indigo-400 text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-800 hover:border-slate-700 transition-all duration-200"
+                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all duration-200"
+                    style={{
+                      background: 'var(--brand-gradient-soft)',
+                      color: 'var(--brand-primary)',
+                      border: '1px solid var(--surface-border)',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = cardGrad; (e.currentTarget as HTMLElement).style.color = 'white'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--brand-gradient-soft)'; (e.currentTarget as HTMLElement).style.color = 'var(--brand-primary)'; }}
                   >
                     <span>Manage Cohort</span>
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -297,83 +392,117 @@ export default function ProjectsIndexPage() {
       {/* Create Project Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => setShowModal(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+          <div onClick={() => setShowModal(false)} className="absolute inset-0 backdrop-blur-md"
+            style={{ background: 'rgba(0,0,0,0.5)' }} />
 
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl shadow-2xl relative z-10 overflow-hidden">
-            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+          <div className="w-full max-w-lg rounded-3xl shadow-2xl relative z-10 overflow-hidden"
+            style={{ background: 'var(--surface-1)', border: '1px solid var(--surface-border)' }}>
+            <div className="p-6 border-b flex items-center justify-between"
+              style={{ borderColor: 'var(--surface-border)' }}>
               <div>
-                <h3 className="text-lg font-bold text-white">Create New Project</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Initialize a new training cohort batch</p>
+                <h3 className="text-lg font-black" style={{ color: 'var(--foreground)' }}>Create New Project</h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Initialize a new training cohort batch</p>
               </div>
-              <button 
+              <button
                 onClick={() => setShowModal(false)}
-                className="h-8 w-8 rounded-lg bg-slate-950/40 text-slate-450 hover:text-slate-100 flex items-center justify-center border border-slate-850 hover:border-slate-750 transition-colors"
+                className="h-8 w-8 rounded-xl flex items-center justify-center transition-colors cursor-pointer"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--surface-border)', color: 'var(--text-muted)' }}
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateProjectSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleCreateProjectSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               {msg.text && (
-                <div className={`p-4 rounded-xl text-xs font-medium border ${
-                  msg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                <div className={`p-4 rounded-xl text-xs font-semibold border ${
+                  msg.type === 'success' ? 'bg-emerald-50 border-emerald-150 text-emerald-700' : 'bg-rose-50 border-rose-150 text-rose-700'
                 }`}>
                   {msg.text}
                 </div>
               )}
 
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Project Name</label>
+                <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Project Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. EJP - Albatross Boot-camp"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-850 focus:border-indigo-650 text-slate-100 px-4 py-3 rounded-xl outline-none text-xs"
+                  className="input-field"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Batch Number</label>
+                <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Batch Number</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Batch 4"
                   value={batch}
                   onChange={(e) => setBatch(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-850 focus:border-indigo-650 text-slate-100 px-4 py-3 rounded-xl outline-none text-xs"
+                  className="input-field"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Description</label>
+                <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Description</label>
                 <textarea
                   placeholder="Write a brief overview..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-850 focus:border-indigo-650 text-slate-100 px-4 py-3 rounded-xl outline-none text-xs resize-none"
+                  className="input-field resize-none"
                   rows={3}
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Roster Spreadsheet Upload (CSV)</label>
-                <div className="relative border-2 border-dashed border-slate-850 hover:border-slate-750 bg-slate-950/40 rounded-2xl p-6 text-center transition-all duration-200 cursor-pointer">
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Roster Spreadsheet Upload (CSV/Excel)</label>
+                <div className="relative border-2 border-dashed border-slate-800 hover:border-slate-650 bg-slate-850/10 rounded-2xl p-6 text-center transition-all duration-200 cursor-pointer">
                   <input
                     type="file"
-                    accept=".csv"
+                    accept=".csv,.xlsx,.xls"
                     onChange={handleFileUpload}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                   />
                   <div className="flex flex-col items-center gap-2">
-                    <FileText className="h-8 w-8 text-indigo-500" />
-                    <p className="text-xs text-slate-350 font-semibold">{fileName || 'Choose CSV file or drag here'}</p>
-                    <span className="text-[9px] text-slate-500">Columns: Name, Email, Phone, Tier, Hired, Resume, Github, Linkedin</span>
+                    <FileText className="h-8 w-8 text-fuchsia-500" />
+                    <p className="text-xs text-slate-650 font-bold">{fileName || 'Choose CSV/Excel file or drag here'}</p>
+                    <span className="text-[9px] text-slate-400">Columns: Name, Email, Phone, Tier, Hired, Resume, Github, Linkedin</span>
                   </div>
                 </div>
                 {studentsList.length > 0 && (
-                  <p className="text-[10px] text-emerald-400 font-semibold mt-2">✓ Parsed {studentsList.length} students from the sheet.</p>
+                  <p className="text-[10px] text-emerald-600 font-bold mt-2">✓ Parsed {studentsList.length} students from the sheet.</p>
+                )}
+              </div>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-800/60"></div>
+                <span className="flex-shrink mx-4 text-[9px] text-slate-550 font-bold uppercase tracking-wider">Or Connect Google Sheet</span>
+                <div className="flex-grow border-t border-slate-800/60"></div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Google Sheet URL</label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+                    value={sheetUrl}
+                    onChange={(e) => setSheetUrl(e.target.value)}
+                    className="flex-1 bg-slate-850/30 border border-slate-800 focus:border-purple-400 text-slate-700 px-4 py-3 rounded-xl outline-none text-xs placeholder:text-slate-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGoogleSheetImport}
+                    disabled={importLoading || !sheetUrl}
+                    className="bg-slate-850 hover:bg-slate-800 text-purple-700 border border-slate-700 px-4 rounded-xl text-xs font-bold tracking-wide transition-all duration-200 disabled:opacity-40 cursor-pointer"
+                  >
+                    {importLoading ? 'Loading...' : 'Load Sheet'}
+                  </button>
+                </div>
+                {sheetUrl && (
+                  <p className="text-[9px] text-slate-500 mt-1">Make sure sheet sharing is set to "Anyone with the link can view".</p>
                 )}
               </div>
 
@@ -381,14 +510,14 @@ export default function ProjectsIndexPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 bg-slate-850 border border-slate-800 text-slate-350 hover:text-white py-3 rounded-xl text-xs font-bold transition-colors"
+                  className="flex-1 bg-slate-850 border border-slate-800 text-slate-650 hover:bg-slate-800 py-3 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createLoading || !name || !batch}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50"
+                  className="flex-1 bg-gradient-to-r from-fuchsia-600 to-orange-550 hover:from-fuchsia-500 hover:to-orange-450 text-white py-3 rounded-xl text-xs font-bold transition-all shadow-lg shadow-fuchsia-500/10 disabled:opacity-50 cursor-pointer"
                 >
                   {createLoading ? 'Synchronizing...' : 'Sync Cohort'}
                 </button>

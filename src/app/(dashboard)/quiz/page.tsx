@@ -213,32 +213,40 @@ export default function GlobalQuizDashboard() {
       {/* Page Header with project dropdown selection */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
-            <BookOpen className="h-8 w-8 text-indigo-500" />
-            <span>AI Quiz System</span>
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">Formulate assessment quizzes with predictive AI helper</p>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="h-7 w-7 rounded-xl flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #d946ef)' }}>
+              <BookOpen className="h-4 w-4 text-white" />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-faint)' }}>
+              Assessments
+            </span>
+          </div>
+          <h1 className="text-3xl font-black tracking-tight gradient-text">AI Quiz System</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Formulate assessment quizzes with predictive AI helper</p>
         </div>
 
         {/* Project Selector Dropdown */}
-        <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-2xl px-4 py-2.5 w-fit">
-          <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Active Batch:</span>
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl w-fit"
+          style={{ background: 'var(--surface-1)', border: '1px solid var(--surface-border)' }}>
+          <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-faint)' }}>Active Batch:</span>
           {loadingProjects ? (
-            <div className="h-4 w-28 bg-slate-800 animate-pulse rounded"></div>
+            <div className="h-4 w-28 rounded skeleton" />
           ) : (
             <div className="relative flex items-center">
               <select
                 value={selectedProjectId}
                 onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="bg-transparent text-xs font-bold text-slate-200 outline-none cursor-pointer pr-6 appearance-none"
+                className="text-xs font-bold outline-none cursor-pointer pr-6 appearance-none"
+                style={{ background: 'transparent', color: 'var(--foreground)' }}
               >
                 {projects.map(p => (
-                  <option key={p._id} value={p._id} className="bg-slate-900 text-slate-200">
+                  <option key={p._id} value={p._id} style={{ background: 'var(--surface-1)', color: 'var(--foreground)' }}>
                     {p.name} ({p.batch})
                   </option>
                 ))}
               </select>
-              <ChevronDown className="h-4 w-4 text-slate-500 absolute right-0 pointer-events-none" />
+              <ChevronDown className="h-4 w-4 absolute right-0 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
             </div>
           )}
         </div>
@@ -247,133 +255,161 @@ export default function GlobalQuizDashboard() {
       {/* Main Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Form: AI Creator */}
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6 shadow-2xl shadow-indigo-500/5 space-y-6 relative overflow-hidden">
-          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
-          <div className="flex items-center gap-2 border-b border-slate-800/80 pb-4">
-            <Sparkles className="h-5 w-5 text-indigo-400" />
-            <h3 className="text-sm font-bold text-slate-200">AI Prompt Assistant</h3>
+        <div className="glass-card p-6 space-y-6 relative overflow-hidden">
+          <div className="flex items-center gap-2 border-b pb-4" style={{ borderColor: 'var(--surface-border)' }}>
+            <Sparkles className="h-5 w-5" style={{ color: 'var(--brand-primary)' }} />
+            <h3 className="text-sm font-black uppercase tracking-widest" style={{ color: 'var(--foreground)' }}>AI Prompt Assistant</h3>
           </div>
 
           <form onSubmit={handleGenerateQuizAI} className="space-y-5">
             {quizMsg.text && (
-              <div className={`p-4 rounded-xl text-xs font-medium border flex items-center gap-2 ${
-                quizMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-455' : 'bg-rose-500/10 border-rose-500/20 text-rose-450'
+              <div className={`p-4 rounded-xl text-xs font-semibold border flex items-center gap-2 ${
+                quizMsg.type === 'success'
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+                  : 'bg-rose-500/10 border-rose-500/20 text-rose-500'
               }`}>
                 {quizMsg.type === 'success' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <Info className="h-4 w-4 shrink-0" />}
                 <span>{quizMsg.text}</span>
               </div>
             )}
 
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Syllabus / Concept</label>
-              <textarea
-                required
-                placeholder="e.g. React hooks rules, state handling and async side effects."
-                value={quizTopic}
-                onChange={(e) => setQuizTopic(e.target.value)}
-                rows={4}
-                className="w-full bg-slate-950/50 backdrop-blur-sm border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-100 p-3 rounded-xl outline-none text-xs resize-none transition-all"
-              />
-            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--brand-primary)' }}>Target Batch / Project</label>
+                <div className="relative">
+                  <select
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    className="input-field cursor-pointer appearance-none bg-indigo-500/5 border-indigo-500/20"
+                    style={{ colorScheme: 'dark' }}
+                  >
+                    {projects.map(p => (
+                      <option key={p._id} value={p._id} style={{ background: 'var(--surface-1)', color: 'var(--foreground)' }}>
+                        {p.name} ({p.batch})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="h-4 w-4 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--brand-primary)' }} />
+                </div>
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Question Count</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={quizNumQuestions}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
-                    setQuizNumQuestions(val === '' ? '' : parseInt(val, 10));
-                  }}
-                  className="w-full bg-slate-950/50 backdrop-blur-sm border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-100 px-3 py-2.5 rounded-xl outline-none text-xs transition-all"
+                <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Syllabus / Concept</label>
+                <textarea
+                  required
+                  placeholder="e.g. React hooks rules, state handling and async side effects."
+                  value={quizTopic}
+                  onChange={(e) => setQuizTopic(e.target.value)}
+                  rows={3}
+                  className="input-field resize-none focus:border-indigo-500/50 transition-colors"
                 />
               </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Duration (Mins)</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={quizDuration}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
-                    setQuizDuration(val === '' ? '' : parseInt(val, 10));
-                  }}
-                  className="w-full bg-slate-950/50 backdrop-blur-sm border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-100 px-3 py-2.5 rounded-xl outline-none text-xs transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Marks / Question</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={quizMarksPerQ}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
-                    setQuizMarksPerQ(val === '' ? '' : parseInt(val, 10));
-                  }}
-                  className="w-full bg-slate-950/50 backdrop-blur-sm border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-100 px-3 py-2.5 rounded-xl outline-none text-xs transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Difficulty</label>
-                <select
-                  value={quizDifficulty}
-                  onChange={(e) => setQuizDifficulty(e.target.value)}
-                  className="w-full bg-slate-950/50 backdrop-blur-sm border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-100 px-3 py-2.5 rounded-xl outline-none text-xs appearance-none transition-all"
-                  style={{ colorScheme: 'dark' }}
-                >
-                  <option value="Easy" className="bg-slate-900 text-slate-100">Easy</option>
-                  <option value="Easy to Moderate" className="bg-slate-900 text-slate-100">Easy to Moderate</option>
-                  <option value="Moderate" className="bg-slate-900 text-slate-100">Moderate</option>
-                  <option value="Moderate to Hard" className="bg-slate-900 text-slate-100">Moderate to Hard</option>
-                  <option value="Hard" className="bg-slate-900 text-slate-100">Hard</option>
-                </select>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Question Count</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={quizNumQuestions}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
+                      setQuizNumQuestions(val === '' ? '' : parseInt(val, 10));
+                    }}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Duration (Mins)</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={quizDuration}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
+                      setQuizDuration(val === '' ? '' : parseInt(val, 10));
+                    }}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Marks / Question</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={quizMarksPerQ}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
+                      setQuizMarksPerQ(val === '' ? '' : parseInt(val, 10));
+                    }}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Difficulty</label>
+                  <div className="relative">
+                    <select
+                      value={quizDifficulty}
+                      onChange={(e) => setQuizDifficulty(e.target.value)}
+                      className="input-field cursor-pointer appearance-none"
+                      style={{ colorScheme: 'dark' }}
+                    >
+                      <option value="Easy">Easy</option>
+                      <option value="Easy to Moderate">Easy to Moderate</option>
+                      <option value="Moderate">Moderate</option>
+                      <option value="Moderate to Hard">Moderate to Hard</option>
+                      <option value="Hard">Hard</option>
+                    </select>
+                    <ChevronDown className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
+                  </div>
+                </div>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={generatingQuiz || !quizTopic || !selectedProjectId}
-              className="relative w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white py-3.5 rounded-xl text-xs font-bold transition-all duration-300 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] disabled:opacity-50 overflow-hidden group"
+              className="btn-primary w-full cursor-pointer flex items-center justify-center gap-2"
+              style={{ padding: '12px 20px', borderRadius: '12px' }}
             >
-              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
-              <span className="relative z-10">
-                {generatingQuiz ? 'AI Formulating Quiz...' : 'Generate AI Quiz'}
-              </span>
+              {generatingQuiz ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
+              <span>{generatingQuiz ? 'AI Formulating Quiz...' : 'Generate AI Quiz'}</span>
             </button>
           </form>
         </div>
 
         {/* Right list: Quizzes lists */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="border-b border-slate-850 pb-4">
-            <h3 className="text-sm font-bold text-slate-200">
+          <div className="border-b pb-4" style={{ borderColor: 'var(--surface-border)' }}>
+            <h3 className="text-sm font-bold" style={{ color: 'var(--foreground)' }}>
               Quizzes in {selectedProject?.name || 'Selected Cohort'}
             </h3>
-            <p className="text-xs text-slate-500 mt-1">Control draft/active states, or open live student examinations.</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Control draft/active states, or open live student examinations.</p>
           </div>
 
           {loadingQuizzes ? (
             <div className="space-y-4">
-              <div className="h-20 bg-slate-900/20 border border-slate-800 animate-pulse rounded-2xl"></div>
-              <div className="h-20 bg-slate-900/20 border border-slate-800 animate-pulse rounded-2xl"></div>
+              <div className="h-20 skeleton rounded-2xl" />
+              <div className="h-20 skeleton rounded-2xl" />
             </div>
           ) : quizzes.length > 0 ? (
             <div className="space-y-4">
               {quizzes.map((quiz) => (
-                <div key={quiz._id} className="group bg-slate-900/40 backdrop-blur-md border border-white/5 hover:border-indigo-500/30 p-5 rounded-2xl flex items-center justify-between gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10">
+                <div key={quiz._id}
+                  className="glass-card p-5 flex items-center justify-between gap-4 transition-all duration-300 hover:-translate-y-1">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-slate-200 text-xs">{quiz.title}</h4>
-                      <span className={`text-[8px] font-bold uppercase px-2 py-0.5 rounded ${
-                        quiz.status === 'Live' ? 'bg-emerald-500/15 text-emerald-450 border border-emerald-500/20' : 'bg-slate-800 text-slate-550 border border-slate-800'
-                      }`}>
+                      <h4 className="font-bold text-xs" style={{ color: 'var(--foreground)' }}>{quiz.title}</h4>
+                      <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded"
+                        style={{
+                          background: quiz.status === 'Live' ? 'rgba(16,185,129,0.1)' : 'var(--surface-2)',
+                          color: quiz.status === 'Live' ? '#10b981' : 'var(--text-muted)',
+                          border: `1px solid ${quiz.status === 'Live' ? 'rgba(16,185,129,0.2)' : 'var(--surface-border)'}`
+                        }}>
                         {quiz.status}
                       </span>
                     </div>
-                    <span className="text-[10px] text-slate-500 mt-1.5 block">
+                    <span className="text-[10px] mt-1.5 block" style={{ color: 'var(--text-faint)' }}>
                       Duration: {quiz.durationMinutes} minutes | Questions: {quiz.questions?.length || 5} {quiz.avgScore ? `| Avg Grade: ${quiz.avgScore}%` : ''}
                     </span>
                   </div>
@@ -383,7 +419,14 @@ export default function GlobalQuizDashboard() {
                       <Link
                         href={`/quiz-portal/${quiz._id}?projectId=${selectedProjectId}`}
                         target="_blank"
-                        className="flex items-center gap-1 bg-slate-950 border border-slate-850 hover:border-slate-800 hover:text-white text-indigo-400 text-[10px] px-3.5 py-2 rounded-xl font-bold uppercase tracking-wider transition-colors shadow-lg shadow-indigo-950/20"
+                        className="flex items-center gap-1 text-[10px] px-3.5 py-2 rounded-xl font-bold uppercase tracking-wider transition-all"
+                        style={{
+                          background: 'var(--brand-gradient-soft)',
+                          color: 'var(--brand-primary)',
+                          border: '1px solid var(--surface-border)'
+                        }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, #7c3aed, #d946ef)'; (e.currentTarget as HTMLElement).style.color = 'white'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--brand-gradient-soft)'; (e.currentTarget as HTMLElement).style.color = 'var(--brand-primary)'; }}
                       >
                         <span>Live Portal</span>
                         <ExternalLink className="h-3.5 w-3.5" />
@@ -392,11 +435,12 @@ export default function GlobalQuizDashboard() {
 
                     <button
                       onClick={() => handleToggleQuizStatus(quiz._id, quiz.status)}
-                      className={`p-2.5 rounded-xl border transition-colors ${
-                        quiz.status === 'Live' 
-                          ? 'bg-amber-500/10 border-amber-500/20 text-amber-500 hover:bg-amber-500/25' 
-                          : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/25'
-                      }`}
+                      className="p-2.5 rounded-xl border transition-colors cursor-pointer"
+                      style={{
+                        background: quiz.status === 'Live' ? 'rgba(245,158,11,0.06)' : 'rgba(16,185,129,0.06)',
+                        borderColor: quiz.status === 'Live' ? 'rgba(245,158,11,0.2)' : 'rgba(16,185,129,0.2)',
+                        color: quiz.status === 'Live' ? '#f59e0b' : '#10b981'
+                      }}
                     >
                       {quiz.status === 'Live' ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                     </button>
@@ -405,7 +449,8 @@ export default function GlobalQuizDashboard() {
               ))}
             </div>
           ) : (
-            <div className="h-40 border border-dashed border-slate-850 rounded-2xl flex items-center justify-center text-xs text-slate-655">
+            <div className="h-40 border border-dashed rounded-2xl flex items-center justify-center text-xs text-center p-6"
+              style={{ borderColor: 'var(--surface-border)', color: 'var(--text-faint)' }}>
               No quizzes created for this cohort yet. Use the prompt generator on the left to start!
             </div>
           )}

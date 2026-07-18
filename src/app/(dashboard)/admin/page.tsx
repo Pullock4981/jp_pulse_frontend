@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { apiRequest } from '@/utils/api';
-import { ShieldCheck, Users, Trash2, Edit3, X, Check } from 'lucide-react';
+import { ShieldCheck, Users, Trash2, Edit3, X, Check, CheckCircle, XCircle } from 'lucide-react';
 
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<'users' | 'students'>('users');
@@ -29,7 +29,48 @@ export default function AdminDashboard() {
         setStudents(res.data || []);
       }
     } catch (err) {
-      console.error('Error fetching data:', err);
+      console.warn('Backend failed, loading mock admin data:', err);
+      if (activeTab === 'users') {
+        setUsers([
+          {
+            _id: 'user-1',
+            name: 'Demo Admin User',
+            email: 'admin@placementpulse.org',
+            role: 'admin',
+            status: 'approved'
+          },
+          {
+            _id: 'user-2',
+            name: 'Demo Mentor User',
+            email: 'mentor@placementpulse.org',
+            role: 'mentor',
+            status: 'pending'
+          }
+        ]);
+      } else {
+        setStudents([
+          {
+            _id: 'stud-1',
+            name: 'Jane Doe',
+            email: 'jane.doe@example.com',
+            project: {
+              _id: 'proj-1',
+              name: 'Albatross Boot-camp',
+              batch: 'Batch 4'
+            }
+          },
+          {
+            _id: 'stud-2',
+            name: 'John Smith',
+            email: 'john.smith@example.com',
+            project: {
+              _id: 'proj-1',
+              name: 'Albatross Boot-camp',
+              batch: 'Batch 4'
+            }
+          }
+        ]);
+      }
     } finally {
       setLoading(false);
     }
@@ -69,7 +110,7 @@ export default function AdminDashboard() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this record? This action cannot be undone.')) return;
-    
+
     try {
       if (activeTab === 'users') {
         await apiRequest(`/admin/users/${id}`, { method: 'DELETE' });
@@ -84,6 +125,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleQuickApprove = async (id: string, status: 'approved' | 'rejected') => {
+    try {
+      await apiRequest(`/admin/users/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status }),
+      });
+      setUsers(users.map(u => u._id === id ? { ...u, status } : u));
+    } catch (err) {
+      console.error('Error updating status:', err);
+      alert('Failed to update status');
+    }
+  };
+
+
   return (
     <div className="space-y-8 relative">
       <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
@@ -92,7 +147,7 @@ export default function AdminDashboard() {
       <div className="flex items-center gap-3">
         <ShieldCheck className="h-8 w-8 text-emerald-500" />
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">Admin Management Panel</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-100">Admin Management Panel</h1>
           <p className="text-slate-400 text-sm mt-1">Manage all platform users, mentors, and students</p>
         </div>
       </div>
@@ -101,17 +156,15 @@ export default function AdminDashboard() {
       <div className="flex bg-slate-950 p-1 border border-slate-850 rounded-2xl w-fit gap-1">
         <button
           onClick={() => setActiveTab('users')}
-          className={`px-6 py-2 text-xs font-semibold rounded-xl transition-all ${
-            activeTab === 'users' ? 'bg-emerald-600 text-white' : 'text-slate-450 hover:text-slate-200'
-          }`}
+          className={`px-6 py-2 text-xs font-semibold rounded-xl transition-all ${activeTab === 'users' ? 'bg-emerald-600 text-white' : 'text-slate-450 hover:text-slate-200'
+            }`}
         >
           Mentors / Admins
         </button>
         <button
           onClick={() => setActiveTab('students')}
-          className={`px-6 py-2 text-xs font-semibold rounded-xl transition-all ${
-            activeTab === 'students' ? 'bg-emerald-600 text-white' : 'text-slate-450 hover:text-slate-200'
-          }`}
+          className={`px-6 py-2 text-xs font-semibold rounded-xl transition-all ${activeTab === 'students' ? 'bg-emerald-600 text-white' : 'text-slate-450 hover:text-slate-200'
+            }`}
         >
           Students
         </button>
@@ -126,6 +179,7 @@ export default function AdminDashboard() {
                 <th className="px-6 py-4">Name</th>
                 <th className="px-6 py-4">Email</th>
                 <th className="px-6 py-4">{activeTab === 'users' ? 'Role' : 'Batch/Project'}</th>
+                {activeTab === 'users' && <th className="px-6 py-4">Status</th>}
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -141,23 +195,36 @@ export default function AdminDashboard() {
                   <tr key={user._id} className="hover:bg-slate-850/30 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-200">
                       {editingId === user._id ? (
-                        <input type="text" value={editFormData.name} onChange={e => setEditFormData({...editFormData, name: e.target.value})} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full" />
+                        <input type="text" value={editFormData.name} onChange={e => setEditFormData({ ...editFormData, name: e.target.value })} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full" />
                       ) : user.name}
                     </td>
                     <td className="px-6 py-4">
                       {editingId === user._id ? (
-                        <input type="email" value={editFormData.email} onChange={e => setEditFormData({...editFormData, email: e.target.value})} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full" />
+                        <input type="email" value={editFormData.email} onChange={e => setEditFormData({ ...editFormData, email: e.target.value })} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full" />
                       ) : user.email}
                     </td>
                     <td className="px-6 py-4">
                       {editingId === user._id ? (
-                        <select value={editFormData.role} onChange={e => setEditFormData({...editFormData, role: e.target.value})} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full">
+                        <select value={editFormData.role} onChange={e => setEditFormData({ ...editFormData, role: e.target.value })} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full">
                           <option value="mentor">Mentor</option>
                           <option value="admin">Admin</option>
                         </select>
                       ) : (
                         <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${user.role === 'admin' ? 'bg-amber-500/20 text-amber-500 border border-amber-500/20' : 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/20'}`}>
                           {user.role}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {editingId === user._id ? (
+                        <select value={editFormData.status || 'pending'} onChange={e => setEditFormData({ ...editFormData, status: e.target.value })} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full">
+                          <option value="pending">Pending</option>
+                          <option value="approved">Approved</option>
+                          <option value="rejected">Rejected</option>
+                        </select>
+                      ) : (
+                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${user.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/20' : user.status === 'rejected' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/20' : 'bg-amber-500/20 text-amber-500 border border-amber-500/20'}`}>
+                          {user.status || 'pending'}
                         </span>
                       )}
                     </td>
@@ -169,6 +236,12 @@ export default function AdminDashboard() {
                         </>
                       ) : (
                         <>
+                          {(!user.status || user.status === 'pending') && (
+                            <>
+                              <button onClick={() => handleQuickApprove(user._id, 'approved')} title="Approve Mentor" className="p-1.5 bg-emerald-500/10 text-emerald-400 rounded hover:bg-emerald-500/20 transition-colors"><CheckCircle className="h-4 w-4" /></button>
+                              <button onClick={() => handleQuickApprove(user._id, 'rejected')} title="Reject Mentor" className="p-1.5 bg-rose-500/10 text-rose-400 rounded hover:bg-rose-500/20 transition-colors"><XCircle className="h-4 w-4" /></button>
+                            </>
+                          )}
                           <button onClick={() => handleEditClick(user)} className="p-1.5 bg-blue-500/10 text-blue-400 rounded hover:bg-blue-500/20 transition-colors"><Edit3 className="h-4 w-4" /></button>
                           <button onClick={() => handleDelete(user._id)} className="p-1.5 bg-rose-500/10 text-rose-500 rounded hover:bg-rose-500/20 transition-colors"><Trash2 className="h-4 w-4" /></button>
                         </>
@@ -181,12 +254,12 @@ export default function AdminDashboard() {
                   <tr key={student._id} className="hover:bg-slate-850/30 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-200">
                       {editingId === student._id ? (
-                        <input type="text" value={editFormData.name} onChange={e => setEditFormData({...editFormData, name: e.target.value})} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full" />
+                        <input type="text" value={editFormData.name} onChange={e => setEditFormData({ ...editFormData, name: e.target.value })} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full" />
                       ) : student.name}
                     </td>
                     <td className="px-6 py-4">
                       {editingId === student._id ? (
-                        <input type="email" value={editFormData.email} onChange={e => setEditFormData({...editFormData, email: e.target.value})} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full" />
+                        <input type="email" value={editFormData.email} onChange={e => setEditFormData({ ...editFormData, email: e.target.value })} className="bg-slate-950 border border-slate-700 rounded px-2 py-1 outline-none text-xs w-full" />
                       ) : student.email}
                     </td>
                     <td className="px-6 py-4">

@@ -9,13 +9,22 @@ import {
   CheckSquare, 
   AlertTriangle,
   Award,
-  BookOpen
+  BookOpen,
+  User,
+  Mail,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  ShieldCheck,
+  Info
 } from 'lucide-react';
 
 interface Question {
   _id: string;
   questionText: string;
   options: string[];
+  marks?: number;
+  correctAnswer?: string;
 }
 
 export default function StudentQuizPortal({ params }: { params: Promise<{ quizAttemptId: string }> }) {
@@ -29,6 +38,12 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
   const [questions, setQuestions] = useState<Question[]>([]);
   const [timeLeft, setTimeLeft] = useState(900); // 15 minutes default
   const [loading, setLoading] = useState(true);
+
+  // User info state
+  const [isStarted, setIsStarted] = useState(false);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Exam answers state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
@@ -45,14 +60,12 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
   const fetchQuizPortalData = async () => {
     try {
       setLoading(true);
-      if (!projectId) throw new Error('Missing projectId');
       
-      const res = await apiRequest(`/projects/${projectId}/quizzes`);
-      const matched = res.data?.find((q: any) => q._id === quizId);
-      if (matched) {
-        setQuiz(matched);
-        setQuestions(matched.questions || []);
-        setTimeLeft(matched.durationMinutes * 60);
+      const res = await apiRequest(`/public/quizzes/${quizId}`);
+      if (res.data) {
+        setQuiz(res.data);
+        setQuestions(res.data.questions || []);
+        setTimeLeft(res.data.durationMinutes * 60);
       } else {
         loadMockQuiz();
       }
@@ -97,7 +110,7 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
 
   // Timer Countdown Effect
   useEffect(() => {
-    if (loading || submitted || cheated) return;
+    if (!isStarted || loading || submitted || cheated) return;
 
     if (timeLeft <= 0) {
       handleAutoSubmit('Auto-Submitted (Timeout)');
@@ -113,7 +126,7 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
 
   // Anti-Cheat Listeners: Visibility Change & Context Menu Block
   useEffect(() => {
-    if (loading || submitted || cheated) return;
+    if (!isStarted || loading || submitted || cheated) return;
 
     // 1. Right Click Block
     const preventRightClick = (e: MouseEvent) => {
@@ -154,6 +167,7 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
   const handleAutoSubmit = async (statusOverride = 'Submitted') => {
     if (submitted) return;
     setSubmitted(true);
+    setIsSubmitting(true);
 
     const answersArray = Object.keys(selectedAnswers).map(qId => ({
       questionId: qId,
@@ -161,41 +175,38 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
     }));
 
     try {
-      // Mock submit to backend endpoint
-      const body = {
-        studentId: 'stud-1', // Mock student
-        answers: answersArray,
-        status: statusOverride
-      };
-
-      // Simulated auto grading
-      let score = 0;
-      questions.forEach((q: any) => {
-        if (selectedAnswers[q._id] === q.correctAnswer) {
-          score += 10; // 10 points per correct answer
-        }
+      const res = await apiRequest(`/public/quizzes/${quizId}/submit`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          email,
+          answers: answersArray,
+          status: statusOverride
+        })
       });
 
       setScoreInfo({
-        score,
-        totalPossible: questions.length * 10,
-        status: statusOverride
+        score: res.data.score,
+        totalPossible: res.data.totalPossibleScore,
+        status: res.data.status
       });
 
     } catch (err) {
-      // Offline simulation
+      // Offline simulation fallback
       let score = 0;
       questions.forEach((q: any) => {
         if (selectedAnswers[q._id] === q.correctAnswer) {
-          score += 10;
+          score += q.marks || 10;
         }
       });
 
       setScoreInfo({
         score,
-        totalPossible: questions.length * 10,
+        totalPossible: questions.reduce((acc, q) => acc + (q.marks || 10), 0),
         status: statusOverride
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -211,6 +222,165 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
         <div className="flex flex-col items-center gap-3">
           <div className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-sm font-medium tracking-wide">Securing Exam Environment...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isStarted) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] text-gray-900 font-sans selection:bg-indigo-100 pb-20">
+        {/* Header Section */}
+        <div className="max-w-6xl mx-auto px-6 pt-12 pb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-widest text-indigo-600">Live Session</span>
+          </div>
+          <h1 className="text-4xl md:text-5xl font-black text-gray-900 tracking-tight mb-4">
+            {quiz?.title || 'AI Assessment Test'}
+          </h1>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm font-semibold text-gray-600">
+            <div className="flex items-center gap-1.5">
+              <Hourglass className="h-4 w-4 text-gray-400" />
+              <span>{quiz?.durationMinutes || 15} Minutes</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <BookOpen className="h-4 w-4 text-gray-400" />
+              <span>{questions.length} Questions</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-400">Organized by</span>
+              <span className="text-gray-800 font-bold">Placement Pulse</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Briefing */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col md:flex-row gap-6">
+              <div className="w-full md:w-48 h-48 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-100 shrink-0">
+                <Award className="h-12 w-12 text-gray-300" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">Pre-Exam Briefing</h3>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Welcome to the <strong>{quiz?.title || 'Assessment'}</strong>, conducted by <strong>Placement Pulse</strong>. This timed exam (<strong>{quiz?.durationMinutes || 15} minutes</strong>) evaluates your core knowledge and problem-solving skills. Questions may be <strong>shuffled</strong>. No external materials, devices, notes, or assistance are permitted. <strong>Tab switching</strong> or prolonged inactivity may trigger <strong>auto-submission</strong>. Your responses are securely recorded and evaluated automatically where applicable. Proceed only if you agree to these strict academic integrity rules.
+                </p>
+              </div>
+            </div>
+
+            {/* Student Info Form */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
+              <h3 className="text-xl font-bold text-gray-900 mb-6">Student Information</h3>
+              <form id="start-quiz-form" onSubmit={(e) => { e.preventDefault(); setIsStarted(true); }} className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-700 block">Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      placeholder="e.g. John Doe"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-700 block">Course Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="name@example.com"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-700 block">Phone Number (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="+880..."
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-gray-700 block">Profile Link (Resume/CV) (Optional)</label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                    />
+                  </div>
+                </div>
+              </form>
+            </div>
+            
+            <button
+              type="submit"
+              form="start-quiz-form"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-600/20 text-lg flex items-center justify-center gap-2"
+            >
+              Start Assessment <ArrowRight className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Right Column */}
+          <div className="space-y-6">
+            {/* Exam Tips */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
+              <div className="flex items-center gap-2 mb-5">
+                <Info className="h-5 w-5 text-gray-700" />
+                <h3 className="text-sm font-black uppercase tracking-widest text-gray-900">Exam Tips</h3>
+              </div>
+              <ul className="space-y-4">
+                {[
+                  "Use a stable internet connection — sudden drops may cause auto-submit.",
+                  "Stay on this tab — switching tabs or minimizing is detected and may trigger auto-submission.",
+                  "Close all other tabs and apps — background activity can be flagged as suspicious.",
+                  "Do not refresh or use back button — your progress is saved automatically.",
+                  "No external help — books, notes, phones, AI tools, or other devices are strictly prohibited."
+                ].map((tip, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-500 shrink-0 mt-0.5" />
+                    <span className="text-xs font-medium text-gray-600 leading-relaxed">{tip}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Security Monitoring */}
+            <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
+              <div className="flex items-center gap-2 mb-5">
+                <ShieldCheck className="h-5 w-5 text-gray-700" />
+                <h3 className="text-sm font-black uppercase tracking-widest text-gray-900">Security Monitoring</h3>
+              </div>
+              
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-100">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <AlertTriangle className="h-4 w-4 text-amber-500" /> Tab Switching
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-100 px-2 py-1 rounded">Auto Submission</span>
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-100">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <CheckSquare className="h-4 w-4 text-emerald-500" /> Auto-Save & Submit
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 bg-emerald-100 px-2 py-1 rounded">Enabled</span>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-100 text-center">
+                <div className="flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">
+                  <ShieldCheck className="h-3 w-3" /> EXAMINO SECURE PROTOCOL V4.2
+                </div>
+                <p className="text-[10px] text-gray-500">All actions are logged. Rule violations trigger automatic submission.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );

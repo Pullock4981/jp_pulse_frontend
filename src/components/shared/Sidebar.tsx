@@ -2,15 +2,17 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  FolderKanban, 
-  Trophy, 
-  Sparkles, 
-  LogOut, 
-  User, 
+import {
+  LayoutDashboard,
+  FolderKanban,
+  Trophy,
+  Sparkles,
+  LogOut,
+  User,
   BookOpen,
-  ShieldCheck
+  ShieldCheck,
+  Zap,
+  ChevronRight
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -23,14 +25,14 @@ export default function Sidebar({ userRole = 'mentor', userName = 'Mentor' }: Si
   const router = useRouter();
 
   const navItems = [
-    { name: 'Global Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Projects', href: '/projects', icon: FolderKanban },
-    { name: 'Quiz System', href: '/quiz', icon: BookOpen },
-    { name: 'Placement AI', href: '/placement', icon: Sparkles },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard, desc: 'Overview & stats' },
+    { name: 'Projects', href: '/projects', icon: FolderKanban, desc: 'Batch management' },
+    { name: 'Quiz System', href: '/quiz', icon: BookOpen, desc: 'Assessments' },
+    { name: 'Placement AI', href: '/placement', icon: Sparkles, desc: 'AI insights' },
   ];
 
   if (userRole === 'admin') {
-    navItems.push({ name: 'Admin Panel', href: '/admin', icon: ShieldCheck });
+    navItems.push({ name: 'Admin Panel', href: '/admin', icon: ShieldCheck, desc: 'System control' });
   }
 
   const handleLogout = () => {
@@ -39,61 +41,122 @@ export default function Sidebar({ userRole = 'mentor', userName = 'Mentor' }: Si
     router.push('/login');
   };
 
-  return (
-    <aside className="w-64 bg-slate-900 border-r border-slate-800 text-slate-100 flex flex-col justify-between h-screen sticky top-0">
-      <div>
-        {/* Brand/Logo */}
-        <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-indigo-500/30">
-            H
-          </div>
-          <div>
-            <h1 className="font-bold text-base leading-tight tracking-tight text-white">Hackathon Portal</h1>
-            <span className="text-xs text-indigo-400 font-medium">Placement Tracker</span>
-          </div>
-        </div>
+  const initials = userName
+    ? userName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    : 'U';
 
-        {/* Navigation Items */}
-        <nav className="p-4 space-y-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
-                  isActive
-                    ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20'
-                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-100 border border-transparent'
-                }`}
-              >
-                <Icon className={`h-5 w-5 ${isActive ? 'text-indigo-400' : 'text-slate-400 group-hover:text-slate-100'}`} />
-                {item.name}
-              </Link>
-            );
-          })}
-        </nav>
+  return (
+    <aside className="w-64 shrink-0 h-screen sticky top-0 z-50 flex flex-col"
+      style={{
+        background: 'var(--surface-1)',
+        borderRight: '1px solid var(--surface-border)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+      }}
+    >
+      {/* ── Brand Logo ─────────────────────────────── */}
+      <div className="p-5 border-b flex items-center gap-3" style={{ borderColor: 'var(--surface-border)' }}>
+        <div className="relative h-10 w-10 shrink-0">
+          <div className="h-10 w-10 rounded-2xl flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #d946ef)' }}
+          >
+            <Zap className="h-5 w-5 text-white" fill="white" />
+          </div>
+          {/* Glow ring */}
+          <div className="absolute inset-0 rounded-2xl opacity-40 blur-md"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #d946ef)', zIndex: -1 }}
+          />
+        </div>
+        <div className="min-w-0">
+          <h1 className="font-extrabold text-sm leading-tight tracking-tight" style={{ color: 'var(--foreground)' }}>
+            Placement Pulse
+          </h1>
+          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--brand-primary)' }}>
+            Cohort Tracker
+          </span>
+        </div>
       </div>
 
-      {/* User Footer Profile & Logout */}
-      <div className="p-4 border-t border-slate-800 space-y-4">
-        <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-slate-800/40 border border-slate-800/60">
-          <div className="h-10 w-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 font-semibold border border-slate-600">
-            <User className="h-5 w-5" />
+      {/* ── Navigation ─────────────────────────────── */}
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <p className="text-[9px] font-black uppercase tracking-widest px-3 py-2 mt-1 mb-1"
+          style={{ color: 'var(--text-faint)' }}>
+          Navigation
+        </p>
+        {navItems.map((item) => {
+          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href + '/')) || (item.href !== '/' && pathname === item.href);
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.name}
+              href={item.href}
+              className="group flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-200 relative"
+              style={{
+                color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)',
+                background: isActive ? 'var(--brand-gradient-soft)' : 'transparent',
+                borderLeft: isActive ? '3px solid var(--brand-primary)' : '3px solid transparent',
+              }}
+            >
+              <div className={`h-8 w-8 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0 ${isActive ? '' : 'group-hover:scale-110'
+                }`}
+                style={{
+                  background: isActive
+                    ? 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(217,70,239,0.15))'
+                    : 'transparent',
+                  color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)',
+                }}
+              >
+                <Icon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="block text-xs font-bold">{item.name}</span>
+                <span className="block text-[10px] font-medium opacity-70">{item.desc}</span>
+              </div>
+              {isActive && (
+                <ChevronRight className="h-3 w-3 shrink-0" style={{ color: 'var(--brand-primary)' }} />
+              )}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* ── User Profile Footer ─────────────────────── */}
+      <div className="p-3 border-t space-y-2" style={{ borderColor: 'var(--surface-border)' }}>
+        {/* User card */}
+        <div className="flex items-center gap-3 px-3 py-3 rounded-xl"
+          style={{ background: 'var(--surface-2)', border: '1px solid var(--surface-border)' }}
+        >
+          <div className="h-9 w-9 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0 text-white"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #d946ef)' }}
+          >
+            {initials}
           </div>
-          <div className="overflow-hidden">
-            <h4 className="text-sm font-semibold text-slate-200 truncate">{userName}</h4>
-            <span className="text-xs text-slate-500 capitalize">{userRole}</span>
+          <div className="min-w-0 flex-1">
+            <h4 className="text-xs font-bold truncate" style={{ color: 'var(--foreground)' }}>{userName}</h4>
+            <span className="text-[9px] font-black uppercase tracking-widest capitalize"
+              style={{ color: 'var(--brand-primary)' }}>
+              {userRole}
+            </span>
           </div>
+          {/* Online indicator */}
+          <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
         </div>
 
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-rose-400 hover:bg-rose-500/5 border border-transparent rounded-xl text-sm font-medium transition-all duration-200"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer"
+          style={{ color: 'var(--text-muted)' }}
+          onMouseEnter={e => {
+            e.currentTarget.style.color = '#f43f5e';
+            e.currentTarget.style.background = 'rgba(244,63,94,0.08)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.color = 'var(--text-muted)';
+            e.currentTarget.style.background = 'transparent';
+          }}
         >
-          <LogOut className="h-5 w-5" />
-          Log Out
+          <LogOut className="h-4 w-4" />
+          Sign Out
         </button>
       </div>
     </aside>
