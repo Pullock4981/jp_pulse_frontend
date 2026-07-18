@@ -248,7 +248,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('user');
+      const stored = sessionStorage.getItem('user');
       if (stored) setUserRole(JSON.parse(stored).role || 'mentor');
     } catch {}
   }, []);

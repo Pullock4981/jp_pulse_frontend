@@ -20,7 +20,7 @@ export default function LoginPage() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (token) router.push('/');
   }, [router]);
 
@@ -33,8 +33,8 @@ export default function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
-      localStorage.setItem('token', res.token);
-      localStorage.setItem('user', JSON.stringify(res.user));
+      sessionStorage.setItem('token', res.token);
+      sessionStorage.setItem('user', JSON.stringify(res.user));
       setSuccess(true);
       setTimeout(() => router.push('/'), 600);
     } catch (err: any) {

@@ -68,7 +68,7 @@ export default function GlobalDashboard() {
 
   useEffect(() => {
     fetchDashboardData();
-    const storedUser = localStorage.getItem('user');
+    const storedUser = sessionStorage.getItem('user');
     if (storedUser) {
       try { setUserRole(JSON.parse(storedUser).role || 'mentor'); } catch { }
     }

@@ -1,7 +1,7 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://hackathon-backend-sandy.vercel.app/api/v1';
 
 export async function apiRequest(path: string, options: RequestInit = {}) {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
   
   const headers = new Headers(options.headers || {});
   headers.set('Content-Type', 'application/json');

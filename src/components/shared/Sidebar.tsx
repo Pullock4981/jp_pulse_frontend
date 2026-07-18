@@ -36,8 +36,8 @@ export default function Sidebar({ userRole = 'mentor', userName = 'Mentor' }: Si
   }
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     router.push('/login');
   };
 

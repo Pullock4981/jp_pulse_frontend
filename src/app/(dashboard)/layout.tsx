@@ -13,8 +13,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
 
   useEffect(() => {
-    let token = localStorage.getItem('token');
-    let storedUser = localStorage.getItem('user');
+    let token = sessionStorage.getItem('token');
+    let storedUser = sessionStorage.getItem('user');
 
     if (!token || !storedUser) {
       router.push('/login');
