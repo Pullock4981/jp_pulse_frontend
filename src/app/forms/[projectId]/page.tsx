@@ -67,7 +67,7 @@ export default function StudentPublicFormPage() {
           });
           setFormData(initialData);
         } else {
-          setError('This student detailed info collection form has not been configured by the admin yet.');
+          setError('This student detailed info collection form has not been configured by the mentor yet.');
         }
       } catch (err) {
         setError('Error establishing connection with the Placement Pulse server.');
@@ -158,7 +158,7 @@ export default function StudentPublicFormPage() {
         }}
       />
 
-      <div className="w-full max-w-2xl bg-white/70 dark:bg-slate-900/60 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden z-10 relative">
+      <div className="w-full max-w-2xl bg-white/95 dark:bg-gray-950/90 backdrop-blur-md border border-gray-200 dark:border-gray-800 rounded-3xl shadow-2xl overflow-hidden z-10 relative">
         {/* Upper colored visual stripe */}
         <div className="h-2 w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-orange-500"></div>
 
@@ -196,17 +196,17 @@ export default function StudentPublicFormPage() {
             <div className="space-y-8">
               <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/80 pb-6 gap-4 animate-fadeIn">
                 <div className="space-y-1 text-left">
-                  <h2 className="text-xl md:text-2xl font-black bg-gradient-to-r from-slate-900 via-indigo-950 to-orange-600 dark:from-white dark:via-slate-200 dark:to-orange-400 bg-clip-text text-transparent">
-                    Kaizen Student Details Portal
+                  <h2 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">
+                    Kaizen Student <span className="text-orange-500">Details Portal</span>
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     Fields marked with <span className="text-rose-500 font-bold">*</span> are required.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={toggleTheme}
-                  className="h-9 w-9 rounded-xl bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-350 hover:text-slate-900 dark:hover:text-white flex items-center justify-center border border-slate-250 dark:border-slate-700 transition-all shrink-0"
+                  className="h-9 w-9 rounded-xl bg-gray-100 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center justify-center border border-gray-200 dark:border-gray-700 transition-all shrink-0"
                 >
                   {isDarkMode ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
                 </button>
@@ -227,7 +227,7 @@ export default function StudentPublicFormPage() {
                     const isFullWidth = field.type === 'textarea' || field.id === 'currentAddress';
                     return (
                       <div key={field.id} className={`space-y-2 ${isFullWidth ? 'md:col-span-2' : ''}`}>
-                        <label className="text-xs font-extrabold uppercase tracking-widest text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                        <label className="text-xs font-extrabold uppercase tracking-widest text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
                           {field.label}
                           {field.required && <span className="text-rose-500 font-bold">*</span>}
                         </label>
@@ -245,14 +245,14 @@ export default function StudentPublicFormPage() {
                                 required={field.required}
                                 value={formData[field.id]}
                                 onChange={(e) => handleInputChange(field.id, e.target.value)}
-                                className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-2xl pl-12 pr-10 py-3.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-950 focus:ring-1 focus:ring-indigo-500 transition-all appearance-none cursor-pointer placeholder:text-slate-450 dark:placeholder:text-slate-500"
+                                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl pl-12 pr-10 py-3.5 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-gray-950 focus:ring-1 focus:ring-indigo-500 transition-all appearance-none cursor-pointer placeholder:text-gray-400 dark:placeholder:text-gray-500"
                               >
-                                <option value="" disabled className="bg-white dark:bg-slate-950 text-slate-550">Choose option...</option>
+                                <option value="" disabled className="bg-white dark:bg-gray-950 text-gray-400">Choose option...</option>
                                 {field.options?.map((opt: string) => (
-                                  <option key={opt} value={opt} className="bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100">{opt}</option>
+                                  <option key={opt} value={opt} className="bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">{opt}</option>
                                 ))}
                               </select>
-                              <ChevronDown className="absolute right-4 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
+                              <ChevronDown className="absolute right-4 h-4 w-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
                             </div>
                           ) : field.type === 'checkbox' ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 w-full p-1">
@@ -262,7 +262,7 @@ export default function StudentPublicFormPage() {
                                   : (formData[field.id] ? String(formData[field.id]).split(',').map((s: string) => s.trim()) : []);
                                 const isChecked = selectedArray.includes(opt);
                                 return (
-                                  <label key={opt} className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/20 border border-slate-200 dark:border-slate-800 hover:border-slate-350 dark:hover:border-slate-700 cursor-pointer select-none transition-colors">
+                                  <label key={opt} className="flex items-start gap-2.5 p-3 rounded-xl bg-white dark:bg-gray-900/50 border border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-600 cursor-pointer select-none transition-colors">
                                     <input
                                       type="checkbox"
                                       checked={isChecked}
@@ -275,9 +275,9 @@ export default function StudentPublicFormPage() {
                                         }
                                         handleInputChange(field.id, nextSelected);
                                       }}
-                                      className="rounded border-slate-300 dark:border-slate-850 text-indigo-600 focus:ring-indigo-500 mt-0.5"
+                                      className="rounded border-gray-300 dark:border-gray-700 text-indigo-600 focus:ring-indigo-500 mt-0.5"
                                     />
-                                    <span className="text-xs font-semibold text-slate-850 dark:text-slate-200 leading-tight">{opt}</span>
+                                    <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 leading-tight">{opt}</span>
                                   </label>
                                 );
                               })}
@@ -289,7 +289,7 @@ export default function StudentPublicFormPage() {
                               onChange={(e) => handleInputChange(field.id, e.target.value)}
                               rows={3}
                               placeholder={`Enter details...`}
-                              className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-3.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-950 focus:ring-1 focus:ring-indigo-500 transition-all resize-none placeholder:text-slate-450 dark:placeholder:text-slate-500"
+                              className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl px-4 py-3.5 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-gray-950 focus:ring-1 focus:ring-indigo-500 transition-all resize-none placeholder:text-gray-400 dark:placeholder:text-gray-500"
                             />
                           ) : (
                             <input
@@ -298,7 +298,7 @@ export default function StudentPublicFormPage() {
                               value={formData[field.id]}
                               onChange={(e) => handleInputChange(field.id, e.target.value)}
                               placeholder={`Enter ${field.label.toLowerCase()}...`}
-                              className="w-full bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 rounded-2xl pl-12 pr-4 py-3.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-950 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-450 dark:placeholder:text-slate-500"
+                              className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl pl-12 pr-4 py-3.5 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-gray-950 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500"
                             />
                           )}
                         </div>

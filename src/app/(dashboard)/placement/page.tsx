@@ -122,25 +122,21 @@ export default function GlobalPlacementDashboard() {
     setMatchedCandidates([]);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      const mockMatches: MatchedCandidate[] = [
-        {
-          id: 'stud-1',
-          name: 'Jane Doe',
-          tier: 'Tier A',
-          totalMark: 43,
-          matchScore: 94,
-          matchingSkills: ['React', 'Node.js', 'Express', 'Mongoose']
-        },
-        {
-          id: 'stud-2',
-          name: 'Alice Johnson',
-          tier: 'Tier B',
-          totalMark: 33,
-          matchScore: 78,
-          matchingSkills: ['React', 'Express']
-        }
-      ];
+      const res = await apiRequest(`/projects/${selectedProjectId}/students`);
+      const students = res.data || [];
+      
+      // Shuffle students and pick top 3
+      const shuffled = students.sort(() => 0.5 - Math.random()).slice(0, 3);
+      
+      const mockMatches: MatchedCandidate[] = shuffled.map((student: any) => ({
+        id: student._id,
+        name: student.name,
+        tier: student.tier || 'Tier B',
+        totalMark: student.totalMark || 0,
+        matchScore: Math.floor(Math.random() * (99 - 70 + 1)) + 70, // Random score between 70-99
+        matchingSkills: ['React', 'Node.js', 'Communication'] // Mock skills
+      })).sort((a: any, b: any) => b.matchScore - a.matchScore);
+
       setMatchedCandidates(mockMatches);
     } catch (err) {
       // Ignore

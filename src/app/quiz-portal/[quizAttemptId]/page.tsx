@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useRef, use } from 'react';
 import { apiRequest } from '@/utils/api';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
@@ -47,6 +47,10 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
 
   // Exam answers state
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+  const selectedAnswersRef = useRef(selectedAnswers);
+  useEffect(() => {
+    selectedAnswersRef.current = selectedAnswers;
+  }, [selectedAnswers]);
   
   // Anti-Cheat State
   const [cheated, setCheated] = useState(false);
@@ -122,7 +126,7 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, loading, submitted, cheated]);
+  }, [timeLeft, loading, submitted, cheated, isStarted]);
 
   // Anti-Cheat Listeners: Visibility Change & Context Menu Block
   useEffect(() => {
@@ -141,7 +145,7 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
     // 3. Tab Switch / Window Blur check
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        handleAutoSubmit('Auto-Submitted (Cheated)');
+        handleAutoSubmit('Auto-Submitted (Cheated)', true);
         setCheated(true);
       }
     };
@@ -155,7 +159,7 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
       window.removeEventListener('copy', preventCopy);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [loading, submitted, cheated]);
+  }, [loading, submitted, cheated, isStarted]);
 
   const handleSelectAnswer = (qId: string, option: string) => {
     setSelectedAnswers(prev => ({
@@ -164,14 +168,15 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
     }));
   };
 
-  const handleAutoSubmit = async (statusOverride = 'Submitted') => {
+  const handleAutoSubmit = async (statusOverride = 'Submitted', useLatestAnswers = false) => {
     if (submitted) return;
     setSubmitted(true);
     setIsSubmitting(true);
 
-    const answersArray = Object.keys(selectedAnswers).map(qId => ({
+    const currentAnswers = useLatestAnswers ? selectedAnswersRef.current : selectedAnswers;
+    const answersArray = Object.keys(currentAnswers).map(qId => ({
       questionId: qId,
-      providedAnswer: selectedAnswers[qId]
+      providedAnswer: currentAnswers[qId]
     }));
 
     try {
@@ -194,8 +199,9 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
     } catch (err) {
       // Offline simulation fallback
       let score = 0;
+      const currentAnswers = useLatestAnswers ? selectedAnswersRef.current : selectedAnswers;
       questions.forEach((q: any) => {
-        if (selectedAnswers[q._id] === q.correctAnswer) {
+        if (currentAnswers[q._id] === q.correctAnswer) {
           score += q.marks || 10;
         }
       });
@@ -205,6 +211,28 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
         totalPossible: questions.reduce((acc, q) => acc + (q.marks || 10), 0),
         status: statusOverride
       });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleStartQuiz = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    try {
+      const res = await apiRequest(`/public/quizzes/${quizId}/verify`, {
+        method: 'POST',
+        body: JSON.stringify({ email })
+      });
+      
+      if (res.success) {
+        setIsStarted(true);
+      } else {
+        alert(res.message || 'Access denied');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error verifying student batch. You may not be enrolled.');
     } finally {
       setIsSubmitting(false);
     }
@@ -274,7 +302,7 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
             {/* Student Info Form */}
             <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
               <h3 className="text-xl font-bold text-gray-900 mb-6">Student Information</h3>
-              <form id="start-quiz-form" onSubmit={(e) => { e.preventDefault(); setIsStarted(true); }} className="space-y-5">
+              <form id="start-quiz-form" onSubmit={handleStartQuiz} className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-gray-700 block">Full Name</label>
@@ -321,9 +349,12 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
             <button
               type="submit"
               form="start-quiz-form"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-600/20 text-lg flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-600/20 text-lg flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              Start Assessment <ArrowRight className="h-5 w-5" />
+              {isSubmitting ? 'Verifying...' : (
+                <>Start Assessment <ArrowRight className="h-5 w-5" /></>
+              )}
             </button>
           </div>
 
@@ -412,11 +443,11 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
             {questions.map((question, qIdx) => (
               <div 
                 key={question._id} 
-                className="bg-slate-900/40 border border-slate-850 p-6 rounded-3xl space-y-4"
+                className="bg-white border border-gray-200 p-8 rounded-3xl space-y-6 shadow-sm"
               >
-                <div className="flex gap-2">
-                  <span className="text-xs font-bold text-indigo-400 font-mono">Q{qIdx + 1}.</span>
-                  <h4 className="font-semibold text-sm text-slate-100 leading-relaxed">
+                <div className="flex gap-3">
+                  <span className="text-sm font-bold text-indigo-600 font-mono mt-0.5">Q{qIdx + 1}.</span>
+                  <h4 className="font-semibold text-base text-gray-900 leading-relaxed">
                     {question.questionText}
                   </h4>
                 </div>
@@ -429,13 +460,16 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
                         key={option}
                         type="button"
                         onClick={() => handleSelectAnswer(question._id, option)}
-                        className={`w-full text-left p-3.5 rounded-xl border text-xs font-medium transition-all ${
+                        className={`w-full text-left p-4 rounded-xl border text-sm font-medium transition-all flex items-center gap-4 ${
                           isSelected
-                            ? 'bg-indigo-600/10 border-indigo-500 text-indigo-400'
-                            : 'bg-slate-950/40 border-slate-855 text-slate-450 hover:border-slate-800 hover:text-slate-200'
+                            ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                            : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-300 hover:bg-gray-50'
                         }`}
                       >
-                        {option}
+                        <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-indigo-600 bg-indigo-100' : 'border-gray-300 bg-white'}`}>
+                          {isSelected && <div className="h-2.5 w-2.5 rounded-full bg-indigo-600" />}
+                        </div>
+                        <span className="flex-1">{option}</span>
                       </button>
                     );
                   })}

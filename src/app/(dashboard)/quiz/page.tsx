@@ -38,6 +38,7 @@ export default function GlobalQuizDashboard() {
 
   // Form states
   const [quizTopic, setQuizTopic] = useState('');
+  const [quizTitle, setQuizTitle] = useState('');
   const [quizNumQuestions, setQuizNumQuestions] = useState<number | ''>(5);
   const [quizDuration, setQuizDuration] = useState<number | ''>(15);
   const [quizMarksPerQ, setQuizMarksPerQ] = useState<number | ''>(2);
@@ -155,7 +156,7 @@ export default function GlobalQuizDashboard() {
       const generatedQuestions = aiRes.data || [];
 
       // 2. Format and send to project quizzes endpoint
-      const title = `${quizTopic.charAt(0).toUpperCase() + quizTopic.slice(1)} AI Quiz (${quizDifficulty})`;
+      const title = quizTitle || `${quizTopic.charAt(0).toUpperCase() + quizTopic.slice(1)} AI Quiz (${quizDifficulty})`;
       const newQuizBody = {
         title,
         status: 'Draft' as const,
@@ -175,8 +176,9 @@ export default function GlobalQuizDashboard() {
       setQuizzes(prev => [res.data, ...prev]);
       setQuizMsg({ type: 'success', text: `AI generated "${title}" successfully!` });
       setQuizTopic('');
+      setQuizTitle('');
     } catch (err) {
-      const title = `${quizTopic.charAt(0).toUpperCase() + quizTopic.slice(1)} AI Quiz`;
+      const title = quizTitle || `${quizTopic.charAt(0).toUpperCase() + quizTopic.slice(1)} AI Quiz`;
       const mockQ: Quiz = {
         _id: `mock-q-${Date.now()}`,
         title,
@@ -192,14 +194,26 @@ export default function GlobalQuizDashboard() {
       setQuizzes(prev => [mockQ, ...prev]);
       setQuizMsg({ type: 'success', text: `AI generated "${title}" (Simulated Offline)!` });
       setQuizTopic('');
+      setQuizTitle('');
     } finally {
       setGeneratingQuiz(false);
     }
   };
 
-  const handleToggleQuizStatus = (quizId: string, currentStatus: string) => {
+  const handleToggleQuizStatus = async (quizId: string, currentStatus: Quiz['status']) => {
     const nextStatus = currentStatus === 'Live' ? 'Inactive' : 'Live';
+    // Optimistic UI update
     setQuizzes(prev => prev.map(q => q._id === quizId ? { ...q, status: nextStatus } : q));
+    
+    try {
+      await apiRequest(`/projects/${selectedProjectId}/quizzes/${quizId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: nextStatus })
+      });
+    } catch (err) {
+      // Revert on error
+      setQuizzes(prev => prev.map(q => q._id === quizId ? { ...q, status: currentStatus } : q));
+    }
   };
 
   const selectedProject = projects.find(p => p._id === selectedProjectId);
@@ -294,6 +308,16 @@ export default function GlobalQuizDashboard() {
               </div>
 
               <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Quiz Title / Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. React JS Final Exam"
+                  value={quizTitle}
+                  onChange={(e) => setQuizTitle(e.target.value)}
+                  className="input-field mb-4"
+                />
+
                 <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Syllabus / Concept</label>
                 <textarea
                   required
@@ -432,6 +456,14 @@ export default function GlobalQuizDashboard() {
                         <ExternalLink className="h-3.5 w-3.5" />
                       </Link>
                     )}
+
+                    <Link
+                      href={`/quiz/${quiz._id}?projectId=${selectedProjectId}`}
+                      className="p-2.5 rounded-xl border transition-colors cursor-pointer flex items-center justify-center bg-blue-500/10 text-blue-600 border-blue-500/20 hover:bg-blue-500/20"
+                      title="View Submissions"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    </Link>
 
                     <button
                       onClick={() => handleToggleQuizStatus(quiz._id, quiz.status)}

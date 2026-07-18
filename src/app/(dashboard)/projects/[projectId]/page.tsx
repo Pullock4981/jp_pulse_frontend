@@ -240,6 +240,19 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
   const [copiedReport, setCopiedReport] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<'scorer' | 'matchmaker' | 'synthesizer'>('scorer');
 
+  // Bulk Email Selection state
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [bulkEmailing, setBulkEmailing] = useState(false);
+
+  const [userRole, setUserRole] = useState('mentor');
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('user');
+      if (stored) setUserRole(JSON.parse(stored).role || 'mentor');
+    } catch {}
+  }, []);
+
   useEffect(() => {
     fetchDashboardData();
   }, [projectId]);
@@ -537,13 +550,32 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
         method: 'POST',
         body: JSON.stringify({ studentId })
       });
-      setEmailMsg({ type: 'success', text: 'AI Warning Email sent successfully to the student and mentor!' });
+      setEmailMsg({ type: 'success', text: 'Alert Sent successfully to the student and mentor!' });
       setTimeout(() => setEmailMsg({ type: '', text: '' }), 4000);
     } catch (err) {
       setEmailMsg({ type: 'error', text: 'Failed to send AI email. Check backend configuration.' });
       setTimeout(() => setEmailMsg({ type: '', text: '' }), 4000);
     } finally {
       setSendingEmailId(null);
+    }
+  };
+
+  const handleBulkSendAIEmails = async () => {
+    if (selectedStudentIds.length === 0) return;
+    setBulkEmailing(true);
+    try {
+      await apiRequest('/ai/send-risk-emails', {
+        method: 'POST',
+        body: JSON.stringify({ studentIds: selectedStudentIds })
+      });
+      setEmailMsg({ type: 'success', text: 'Alert Sent successfully to selected students!' });
+      setSelectedStudentIds([]);
+      setTimeout(() => setEmailMsg({ type: '', text: '' }), 4000);
+    } catch (err) {
+      setEmailMsg({ type: 'error', text: 'Failed to send bulk AI emails.' });
+      setTimeout(() => setEmailMsg({ type: '', text: '' }), 4000);
+    } finally {
+      setBulkEmailing(false);
     }
   };
 
@@ -1524,7 +1556,9 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               </div>
 
               <div className="flex items-center gap-3 flex-wrap">
-                {!formConfig ? (
+                {userRole === 'mentor' && (
+                  <>
+                    {!formConfig ? (
                   <button
                     onClick={handleCreateForm}
                     disabled={formSaving}
@@ -1553,6 +1587,8 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                       Import Details
                     </button>
                   </>
+                )}
+                </>
                 )}
 
                 <button
@@ -1598,9 +1634,42 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
             </div>
 
             <div className="overflow-x-auto border border-slate-850 rounded-2xl bg-slate-950/20">
+              {selectedStudentIds.length > 0 && (
+                <div className="bg-slate-900 border-b border-slate-850 p-3 flex items-center justify-between sticky left-0 z-10">
+                  <span className="text-xs font-bold text-indigo-400">
+                    {selectedStudentIds.length} student(s) selected
+                  </span>
+                  <button
+                    onClick={handleBulkSendAIEmails}
+                    disabled={bulkEmailing}
+                    className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-450 border border-rose-500/20 transition-all font-bold text-[10px] uppercase tracking-wider px-4 py-2 rounded-xl flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    {bulkEmailing ? (
+                      <div className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <Send className="h-3.5 w-3.5" />
+                    )}
+                    Send Bulk AI Alert
+                  </button>
+                </div>
+              )}
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead>
                   <tr className="bg-slate-900/60 border-b border-slate-850">
+                    <th className="p-4 w-12 text-center">
+                      <input 
+                        type="checkbox" 
+                        className="rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer"
+                        checked={filteredStudents.length > 0 && selectedStudentIds.length === filteredStudents.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedStudentIds(filteredStudents.map(s => s._id));
+                          } else {
+                            setSelectedStudentIds([]);
+                          }
+                        }}
+                      />
+                    </th>
                     <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500">Student Info</th>
                     <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500">Tier Status</th>
                     <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500">Attendance / Task Marks</th>
@@ -1612,7 +1681,21 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                 </thead>
                 <tbody className="divide-y divide-slate-850/60">
                   {filteredStudents.map((student) => (
-                    <tr key={student._id} className="hover:bg-slate-900/10 transition-all">
+                    <tr key={student._id} className={`hover:bg-slate-900/10 transition-all ${selectedStudentIds.includes(student._id) ? 'bg-indigo-500/5' : ''}`}>
+                      <td className="p-4 text-center">
+                        <input 
+                          type="checkbox" 
+                          className="rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer"
+                          checked={selectedStudentIds.includes(student._id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedStudentIds(prev => [...prev, student._id]);
+                            } else {
+                              setSelectedStudentIds(prev => prev.filter(id => id !== student._id));
+                            }
+                          }}
+                        />
+                      </td>
                       <td className="p-4 flex items-center gap-3">
                         <div className="h-9 w-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-slate-300 text-xs">
                           {student.name.charAt(0)}
@@ -1836,7 +1919,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                 <p className="text-xs text-slate-500 mt-1">Select dropdown to manually toggle attendance status. Syncs scores instantly.</p>
               </div>
 
-              <div className="overflow-x-auto border border-slate-850 rounded-2xl bg-slate-950/20 relative">
+              <div className="w-full max-w-full overflow-x-auto border border-slate-850 rounded-2xl bg-slate-950/20 relative">
                 <table className="w-full text-left border-collapse min-w-[1000px]">
                   <thead>
                     <tr className="bg-slate-900/60 border-b border-slate-850">
@@ -1846,8 +1929,10 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                       <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 sticky left-[23rem] bg-slate-900/90 z-20 w-24 border-r border-slate-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)]">Tier</th>
                       
                       {/* Summary Columns */}
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center w-24 bg-rose-500/5">Total Absent</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center w-24 bg-emerald-500/5">Total Present</th>
+                      {/* Summary Columns */}
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center w-24 bg-rose-500/5">Total Absent Days</th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center w-24 bg-emerald-500/5">Total Present Days</th>
+                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center w-24 bg-indigo-500/5">Attendance Points</th>
                       <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center w-24 bg-purple-500/5 border-r border-slate-850">Absent Streak</th>
                       
                       {/* Dynamic Date Columns */}
@@ -1855,7 +1940,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                         const parts = date.split('-');
                         return (
                           <th key={date} className="p-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 min-w-[120px]">
-                            {parts[1]}/{parts[2]}
+                            {parts[2]}/{parts[1]}/{parts[0]}
                           </th>
                         );
                       })}
@@ -1876,8 +1961,10 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                         </td>
 
                         {/* Summary Columns */}
+                        {/* Summary Columns */}
                         <td className="p-3 text-[11px] font-bold text-rose-400 text-center bg-rose-500/5">{student.totalAbsent}</td>
                         <td className="p-3 text-[11px] font-bold text-emerald-400 text-center bg-emerald-500/5">{student.totalAttendance}</td>
+                        <td className="p-3 text-[11px] font-bold text-indigo-400 text-center bg-indigo-500/5">{student.totalAttendanceMark}</td>
                         <td className="p-3 text-[11px] font-bold text-purple-400 text-center bg-purple-500/5 border-r border-slate-850">{student.absentStreak}</td>
 
                         {/* Dynamic Date Cells */}
@@ -2004,7 +2091,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               <p className="text-xs text-slate-500 mt-1">Grades daily tasks. Click cell to toggle submission states.</p>
             </div>
 
-            <div className="overflow-x-auto border border-slate-850 rounded-2xl bg-slate-950/20 relative">
+            <div className="w-full max-w-full overflow-x-auto border border-slate-850 rounded-2xl bg-slate-950/20 relative">
               <table className="w-full text-left border-collapse min-w-[700px]">
                 <thead>
                   <tr className="bg-slate-900/60 border-b border-slate-850">
@@ -2013,7 +2100,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                       const parts = date.split('-');
                       return (
                         <th key={date} className="p-4 text-center text-xs font-bold uppercase tracking-wider text-slate-500">
-                          {parts[1]}/{parts[2]}
+                          {parts[2]}/{parts[1]}/{parts[0]}
                         </th>
                       );
                     })}
