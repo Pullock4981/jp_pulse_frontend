@@ -38,8 +38,10 @@ export default function GlobalQuizDashboard() {
 
   // Form states
   const [quizTopic, setQuizTopic] = useState('');
-  const [quizNumQuestions, setQuizNumQuestions] = useState(5);
-  const [quizDuration, setQuizDuration] = useState(15);
+  const [quizNumQuestions, setQuizNumQuestions] = useState<number | ''>(5);
+  const [quizDuration, setQuizDuration] = useState<number | ''>(15);
+  const [quizMarksPerQ, setQuizMarksPerQ] = useState<number | ''>(2);
+  const [quizDifficulty, setQuizDifficulty] = useState('Moderate');
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
   const [quizMsg, setQuizMsg] = useState({ type: '', text: '' });
 
@@ -139,18 +141,30 @@ export default function GlobalQuizDashboard() {
     setQuizMsg({ type: '', text: '' });
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      const title = `${quizTopic.charAt(0).toUpperCase() + quizTopic.slice(1)} AI Quiz`;
-      
+      // 1. Fetch AI generated questions from our new endpoint
+      const aiRes = await apiRequest('/ai/generate-quiz', {
+        method: 'POST',
+        body: JSON.stringify({
+          topic: quizTopic,
+          numQuestions: quizNumQuestions,
+          marksPerQuestion: quizMarksPerQ,
+          difficulty: quizDifficulty
+        })
+      });
+
+      const generatedQuestions = aiRes.data || [];
+
+      // 2. Format and send to project quizzes endpoint
+      const title = `${quizTopic.charAt(0).toUpperCase() + quizTopic.slice(1)} AI Quiz (${quizDifficulty})`;
       const newQuizBody = {
         title,
         status: 'Draft' as const,
-        durationMinutes: quizDuration,
-        questions: Array.from({ length: quizNumQuestions }).map((_, idx) => ({
-          questionText: `AI Generated Question ${idx + 1} about ${quizTopic}?`,
-          options: ['Option A', 'Option B', 'Option C (Correct)', 'Option D'],
-          correctAnswer: 'Option C (Correct)',
-          marks: 2
+        durationMinutes: Number(quizDuration) || 0,
+        questions: generatedQuestions.map((q: any) => ({
+          questionText: q.questionText,
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+          marks: q.marks || (Number(quizMarksPerQ) || 2)
         }))
       };
 
@@ -167,8 +181,8 @@ export default function GlobalQuizDashboard() {
         _id: `mock-q-${Date.now()}`,
         title,
         status: 'Draft',
-        durationMinutes: quizDuration,
-        questions: Array.from({ length: quizNumQuestions }).map((_, idx) => ({
+        durationMinutes: Number(quizDuration) || 0,
+        questions: Array.from({ length: Number(quizNumQuestions) || 0 }).map((_, idx) => ({
           questionText: `Which concept of ${quizTopic} represents element ${idx + 1}?`,
           options: ['Virtual DOM', 'Reconciliation', 'State isolation', 'All of the above'],
           correctAnswer: 'All of the above'
@@ -191,7 +205,11 @@ export default function GlobalQuizDashboard() {
   const selectedProject = projects.find(p => p._id === selectedProjectId);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 relative">
+      {/* Ambient Background Blobs */}
+      <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div className="absolute bottom-20 left-10 w-72 h-72 bg-purple-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
+
       {/* Page Header with project dropdown selection */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -229,7 +247,8 @@ export default function GlobalQuizDashboard() {
       {/* Main Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Form: AI Creator */}
-        <div className="bg-slate-900/30 border border-slate-800/80 rounded-3xl p-6 shadow-xl space-y-6">
+        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6 shadow-2xl shadow-indigo-500/5 space-y-6 relative overflow-hidden">
+          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent" />
           <div className="flex items-center gap-2 border-b border-slate-800/80 pb-4">
             <Sparkles className="h-5 w-5 text-indigo-400" />
             <h3 className="text-sm font-bold text-slate-200">AI Prompt Assistant</h3>
@@ -253,7 +272,7 @@ export default function GlobalQuizDashboard() {
                 value={quizTopic}
                 onChange={(e) => setQuizTopic(e.target.value)}
                 rows={4}
-                className="w-full bg-slate-950 border border-slate-850 focus:border-indigo-650 text-slate-100 p-3 rounded-xl outline-none text-xs resize-none"
+                className="w-full bg-slate-950/50 backdrop-blur-sm border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-100 p-3 rounded-xl outline-none text-xs resize-none transition-all"
               />
             </div>
 
@@ -261,33 +280,68 @@ export default function GlobalQuizDashboard() {
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Question Count</label>
                 <input
-                  type="number"
-                  min={1}
-                  max={15}
+                  type="text"
+                  inputMode="numeric"
                   value={quizNumQuestions}
-                  onChange={(e) => setQuizNumQuestions(Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-850 focus:border-indigo-650 text-slate-100 px-3 py-2.5 rounded-xl outline-none text-xs"
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
+                    setQuizNumQuestions(val === '' ? '' : parseInt(val, 10));
+                  }}
+                  className="w-full bg-slate-950/50 backdrop-blur-sm border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-100 px-3 py-2.5 rounded-xl outline-none text-xs transition-all"
                 />
               </div>
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Duration (Mins)</label>
                 <input
-                  type="number"
-                  min={5}
-                  max={60}
+                  type="text"
+                  inputMode="numeric"
                   value={quizDuration}
-                  onChange={(e) => setQuizDuration(Number(e.target.value))}
-                  className="w-full bg-slate-955 border border-slate-850 focus:border-indigo-650 text-slate-100 px-3 py-2.5 rounded-xl outline-none text-xs"
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
+                    setQuizDuration(val === '' ? '' : parseInt(val, 10));
+                  }}
+                  className="w-full bg-slate-950/50 backdrop-blur-sm border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-100 px-3 py-2.5 rounded-xl outline-none text-xs transition-all"
                 />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Marks / Question</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={quizMarksPerQ}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
+                    setQuizMarksPerQ(val === '' ? '' : parseInt(val, 10));
+                  }}
+                  className="w-full bg-slate-950/50 backdrop-blur-sm border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-100 px-3 py-2.5 rounded-xl outline-none text-xs transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Difficulty</label>
+                <select
+                  value={quizDifficulty}
+                  onChange={(e) => setQuizDifficulty(e.target.value)}
+                  className="w-full bg-slate-950/50 backdrop-blur-sm border border-slate-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-100 px-3 py-2.5 rounded-xl outline-none text-xs appearance-none transition-all"
+                  style={{ colorScheme: 'dark' }}
+                >
+                  <option value="Easy" className="bg-slate-900 text-slate-100">Easy</option>
+                  <option value="Easy to Moderate" className="bg-slate-900 text-slate-100">Easy to Moderate</option>
+                  <option value="Moderate" className="bg-slate-900 text-slate-100">Moderate</option>
+                  <option value="Moderate to Hard" className="bg-slate-900 text-slate-100">Moderate to Hard</option>
+                  <option value="Hard" className="bg-slate-900 text-slate-100">Hard</option>
+                </select>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={generatingQuiz || !quizTopic || !selectedProjectId}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-lg shadow-indigo-600/10"
+              className="relative w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white py-3.5 rounded-xl text-xs font-bold transition-all duration-300 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] disabled:opacity-50 overflow-hidden group"
             >
-              {generatingQuiz ? 'AI Formulating Quiz...' : 'Generate AI Quiz'}
+              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
+              <span className="relative z-10">
+                {generatingQuiz ? 'AI Formulating Quiz...' : 'Generate AI Quiz'}
+              </span>
             </button>
           </form>
         </div>
@@ -309,7 +363,7 @@ export default function GlobalQuizDashboard() {
           ) : quizzes.length > 0 ? (
             <div className="space-y-4">
               {quizzes.map((quiz) => (
-                <div key={quiz._id} className="bg-slate-900/20 border border-slate-850 hover:border-slate-800 p-5 rounded-2xl flex items-center justify-between gap-4 transition-colors">
+                <div key={quiz._id} className="group bg-slate-900/40 backdrop-blur-md border border-white/5 hover:border-indigo-500/30 p-5 rounded-2xl flex items-center justify-between gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/10">
                   <div>
                     <div className="flex items-center gap-2">
                       <h4 className="font-bold text-slate-200 text-xs">{quiz.title}</h4>
@@ -327,7 +381,7 @@ export default function GlobalQuizDashboard() {
                   <div className="flex items-center gap-3">
                     {quiz.status === 'Live' && (
                       <Link
-                        href={`/quiz-portal/${quiz._id}`}
+                        href={`/quiz-portal/${quiz._id}?projectId=${selectedProjectId}`}
                         target="_blank"
                         className="flex items-center gap-1 bg-slate-950 border border-slate-850 hover:border-slate-800 hover:text-white text-indigo-400 text-[10px] px-3.5 py-2 rounded-xl font-bold uppercase tracking-wider transition-colors shadow-lg shadow-indigo-950/20"
                       >

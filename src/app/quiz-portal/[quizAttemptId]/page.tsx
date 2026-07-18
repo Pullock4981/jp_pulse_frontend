@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import { apiRequest } from '@/utils/api';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   ShieldAlert, 
   Hourglass, 
@@ -22,6 +22,8 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
   const resolvedParams = use(params);
   const quizId = resolvedParams.quizAttemptId;
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get('projectId');
 
   const [quiz, setQuiz] = useState<any>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -43,7 +45,9 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
   const fetchQuizPortalData = async () => {
     try {
       setLoading(true);
-      const res = await apiRequest(`/projects/any/quizzes`); // Mock URL matching route
+      if (!projectId) throw new Error('Missing projectId');
+      
+      const res = await apiRequest(`/projects/${projectId}/quizzes`);
       const matched = res.data?.find((q: any) => q._id === quizId);
       if (matched) {
         setQuiz(matched);

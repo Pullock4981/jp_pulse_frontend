@@ -23,7 +23,9 @@ export default function GlobalDashboard() {
     totalHired: 0,
     placementRate: '0%',
     totalActive: 0,
-    totalRiskCount: 0
+    totalRiskCount: 0,
+    recentActivities: [] as { text: string, time: string, batch: string }[],
+    priorityTasks: [] as string[]
   });
   
   const [loading, setLoading] = useState(true);
@@ -45,7 +47,9 @@ export default function GlobalDashboard() {
         totalHired: fetchedStats.totalHired || 0,
         placementRate: fetchedStats.placementRate || '0%',
         totalActive: fetchedStats.totalActive || 0,
-        totalRiskCount: 3 // Mock count for UI warning
+        totalRiskCount: fetchedStats.totalRiskCount || 0,
+        recentActivities: fetchedStats.recentActivities || [],
+        priorityTasks: fetchedStats.priorityTasks || []
       });
     } catch (err: any) {
       console.warn('Backend connection failed, using mockup data:', err.message);
@@ -56,7 +60,15 @@ export default function GlobalDashboard() {
         totalHired: 16,
         placementRate: '26.7%',
         totalActive: 44,
-        totalRiskCount: 3
+        totalRiskCount: 3,
+        recentActivities: [
+          { text: 'Jane Doe scored 87% in React Fundamentals Quiz', time: '2 hours ago', batch: 'Batch 4' },
+          { text: 'Moutushi uploaded spreadsheet roster for Albatross Boot-camp', time: '4 hours ago', batch: 'Batch 4' },
+        ],
+        priorityTasks: [
+          'Contact Bob Miller regarding consecutive class absences',
+          'Verify github repository sync for Batch 4 students'
+        ]
       });
     } finally {
       setLoading(false);
@@ -158,12 +170,7 @@ export default function GlobalDashboard() {
           </div>
 
           <div className="space-y-4">
-            {[
-              { text: 'Jane Doe scored 87% in React Fundamentals Quiz', time: '2 hours ago', batch: 'Batch 4' },
-              { text: 'Moutushi uploaded spreadsheet roster for Albatross Boot-camp', time: '4 hours ago', batch: 'Batch 4' },
-              { text: 'Daily task grades synchronized for Falcon Engineering Program', time: '1 day ago', batch: 'Batch 1' },
-              { text: 'Bob Miller flagged at High Dropout Risk (consecutive absences)', time: '2 days ago', batch: 'Batch 4' },
-            ].map((activity, idx) => (
+            {stats.recentActivities.length > 0 ? stats.recentActivities.map((activity, idx) => (
               <div key={idx} className="flex items-start justify-between p-4 rounded-2xl bg-slate-950/40 border border-slate-850">
                 <div className="space-y-1">
                   <p className="text-xs text-slate-300 font-medium">{activity.text}</p>
@@ -173,7 +180,11 @@ export default function GlobalDashboard() {
                   {activity.batch}
                 </span>
               </div>
-            ))}
+            )) : (
+              <div className="p-8 text-center text-xs text-slate-500 border border-slate-850 border-dashed rounded-2xl">
+                No recent activity found.
+              </div>
+            )}
           </div>
         </div>
 
@@ -197,16 +208,16 @@ export default function GlobalDashboard() {
 
             <div className="space-y-2">
               <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Priority Tasks</span>
-              {[
-                'Contact Bob Miller regarding consecutive class absences',
-                'Verify github repository sync for Batch 4 students',
-                'Score pending resume reviews in placement dashboard'
-              ].map((task, idx) => (
+              {stats.priorityTasks.length > 0 ? stats.priorityTasks.map((task, idx) => (
                 <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-400 p-2 border-b border-slate-850/40">
                   <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 mt-1.5"></span>
                   <span>{task}</span>
                 </div>
-              ))}
+              )) : (
+                <div className="p-4 text-center text-xs text-slate-500 italic">
+                  All caught up! No priority tasks.
+                </div>
+              )}
             </div>
           </div>
         </div>

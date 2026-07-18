@@ -155,15 +155,21 @@ export default function ProjectsIndexPage() {
     setMsg({ type: '', text: '' });
 
     try {
-      await apiRequest('/projects', {
+      const projRes = await apiRequest('/projects', {
         method: 'POST',
         body: JSON.stringify({
           name,
           batch,
-          description,
-          students: studentsList
+          description
         })
       });
+
+      if (studentsList.length > 0 && projRes.data?._id) {
+        await apiRequest(`/projects/${projRes.data._id}/students/bulk`, {
+          method: 'POST',
+          body: JSON.stringify({ students: studentsList })
+        });
+      }
 
       setMsg({ type: 'success', text: 'Project created and synced successfully!' });
       setTimeout(() => {

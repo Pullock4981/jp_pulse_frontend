@@ -116,6 +116,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview'); // Tab options: overview, students, attendance, tasks, leaderboard, quiz, placement
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
 
   // Page widgets summary stats
   const [projectStats, setProjectStats] = useState({
@@ -133,6 +134,8 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
   const [showDrawer, setShowDrawer] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
+  const [sendingEmailId, setSendingEmailId] = useState<string | null>(null);
+  const [emailMsg, setEmailMsg] = useState({ type: '', text: '' });
 
   // Operations Matrix states (Attendance & Tasks)
   const [dates, setDates] = useState<string[]>([]);
@@ -391,6 +394,23 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
     }
   };
 
+  const handleSendAIEmail = async (studentId: string) => {
+    setSendingEmailId(studentId);
+    try {
+      await apiRequest('/ai/send-risk-emails', {
+        method: 'POST',
+        body: JSON.stringify({ studentId })
+      });
+      setEmailMsg({ type: 'success', text: 'AI Warning Email sent successfully to the student and mentor!' });
+      setTimeout(() => setEmailMsg({ type: '', text: '' }), 4000);
+    } catch (err) {
+      setEmailMsg({ type: 'error', text: 'Failed to send AI email. Check backend configuration.' });
+      setTimeout(() => setEmailMsg({ type: '', text: '' }), 4000);
+    } finally {
+      setSendingEmailId(null);
+    }
+  };
+
   // Add note inside profile drawer
   const handleAddProfileNote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -476,31 +496,45 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
   };
 
   const updateLocalStudentMarks = (studentId: string, type: 'attendance' | 'task', oldVal: string, newVal: string) => {
-    setStudents(prev => prev.map(s => {
-      if (s._id !== studentId) return s;
-      
-      let attDiff = 0;
-      let tskDiff = 0;
+    setStudents(prev => {
+      const updatedStudents = prev.map(s => {
+        if (s._id !== studentId) return s;
+        
+        let attDiff = 0;
+        let tskDiff = 0;
+        let attendanceDaysDiff = 0;
+        let absentDaysDiff = 0;
 
-      if (type === 'attendance') {
-        const oldMark = oldVal === 'Present' ? 1 : oldVal === 'Absent' ? -1 : 0;
-        const newMark = newVal === 'Present' ? 1 : newVal === 'Absent' ? -1 : 0;
-        attDiff = newMark - oldMark;
-      } else {
-        const oldMark = oldVal === 'Complete' ? 1 : -1;
-        const newMark = newVal === 'Complete' ? 1 : -1;
-        tskDiff = newMark - oldMark;
-      }
+        if (type === 'attendance') {
+          const oldMark = oldVal === 'Present' ? 1 : oldVal === 'Absent' ? -1 : 0;
+          const newMark = newVal === 'Present' ? 1 : newVal === 'Absent' ? -1 : 0;
+          attDiff = newMark - oldMark;
+          
+          if (oldVal === 'Present') attendanceDaysDiff -= 1;
+          else if (oldVal === 'Absent') absentDaysDiff -= 1;
+          
+          if (newVal === 'Present') attendanceDaysDiff += 1;
+          else if (newVal === 'Absent') absentDaysDiff += 1;
+        } else {
+          const oldMark = oldVal === 'Complete' ? 1 : -1;
+          const newMark = newVal === 'Complete' ? 1 : -1;
+          tskDiff = newMark - oldMark;
+        }
 
-      const totalAttendanceMark = s.totalAttendanceMark + attDiff;
-      const totalTaskMark = s.totalTaskMark + tskDiff;
-      return {
-        ...s,
-        totalAttendanceMark,
-        totalTaskMark,
-        totalMark: totalAttendanceMark + totalTaskMark
-      };
-    }));
+        const totalAttendanceMark = s.totalAttendanceMark + attDiff;
+        const totalTaskMark = s.totalTaskMark + tskDiff;
+        return {
+          ...s,
+          totalAttendance: s.totalAttendance + attendanceDaysDiff,
+          totalAbsent: s.totalAbsent + absentDaysDiff,
+          totalAttendanceMark,
+          totalTaskMark,
+          totalMark: totalAttendanceMark + totalTaskMark
+        };
+      });
+      calculateStats(updatedStudents, project);
+      return updatedStudents;
+    });
   };
 
   // AI Quiz Creator prompt submit
@@ -662,15 +696,42 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
   };
 
   // Filters
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    s.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStudents = students.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          s.email.toLowerCase().includes(searchTerm.toLowerCase());
+    let matchesFilter = true;
+    if (statusFilter === 'Active') matchesFilter = s.activeStatus === 'Active';
+    else if (statusFilter === 'Inactive') matchesFilter = s.activeStatus === 'Inactive';
+    else if (statusFilter === 'Placed') matchesFilter = s.hiredStatus === 'Hired';
+    else if (statusFilter === 'Leave') matchesFilter = s.activeStatus === 'Willingly Leave';
+    else if (statusFilter === 'At Risk') matchesFilter = s.riskStatus === 'High';
+    return matchesSearch && matchesFilter;
+  });
 
   const leaderboardSorted = [...students].sort((a, b) => b.totalMark - a.totalMark);
 
   return (
     <div className="space-y-8 relative">
+      {/* Toast Notification for Email */}
+      {emailMsg.text && (
+        <div className={`fixed top-8 right-8 p-4 rounded-2xl shadow-2xl z-50 flex items-center gap-4 transition-all duration-300 ${
+          emailMsg.type === 'success' 
+            ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-100 shadow-emerald-900/20' 
+            : 'bg-rose-950/90 border border-rose-500/50 text-rose-100 shadow-rose-900/20'
+        }`}>
+          {emailMsg.type === 'success' ? <CheckCircle className="h-6 w-6 text-emerald-400" /> : <XCircle className="h-6 w-6 text-rose-400" />}
+          <div>
+            <p className="font-bold text-sm tracking-wide">
+              {emailMsg.type === 'success' ? 'Email Sent Successfully!' : 'Action Failed'}
+            </p>
+            <p className="text-xs opacity-80 mt-0.5">{emailMsg.text}</p>
+          </div>
+          <button onClick={() => setEmailMsg({ type: '', text: '' })} className="ml-4 opacity-60 hover:opacity-100 transition-opacity bg-slate-900/50 p-1.5 rounded-full hover:bg-slate-800">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Back button & Page header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -710,43 +771,64 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
       {/* Project Statistics Widgets */}
       <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
         {/* Total Students */}
-        <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-2xl text-center">
+        <div 
+          onClick={() => { setStatusFilter('All'); setActiveTab('students'); }}
+          className={`border border-slate-850 p-4 rounded-2xl text-center cursor-pointer hover:bg-slate-800/40 transition-colors ${statusFilter === 'All' ? 'bg-slate-800/60 shadow-inner' : 'bg-slate-900/40'}`}
+        >
           <Users className="h-4 w-4 mx-auto text-slate-500" />
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mt-2">Total</span>
           <p className="text-xl font-extrabold text-white mt-1">{projectStats.totalStudents}</p>
         </div>
         {/* Active Students */}
-        <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-2xl text-center">
+        <div 
+          onClick={() => { setStatusFilter('Active'); setActiveTab('students'); }}
+          className={`border border-slate-850 p-4 rounded-2xl text-center cursor-pointer hover:bg-slate-800/40 transition-colors ${statusFilter === 'Active' ? 'bg-slate-800/60 shadow-inner' : 'bg-slate-900/40'}`}
+        >
           <Activity className="h-4 w-4 mx-auto text-indigo-400 animate-pulse" />
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mt-2">Active</span>
           <p className="text-xl font-extrabold text-white mt-1">{projectStats.totalActive}</p>
         </div>
         {/* Avg Attendance */}
-        <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-2xl text-center">
+        <div 
+          onClick={() => setActiveTab('attendance')}
+          className="bg-slate-900/40 border border-slate-850 p-4 rounded-2xl text-center cursor-pointer hover:bg-slate-800/40 transition-colors"
+        >
           <Calendar className="h-4 w-4 mx-auto text-slate-500" />
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mt-2">Attendance</span>
           <p className="text-xl font-extrabold text-white mt-1">{projectStats.avgAttendanceRate.toFixed(1)}%</p>
         </div>
         {/* Total Hired */}
-        <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-2xl text-center">
+        <div 
+          onClick={() => { setStatusFilter('Placed'); setActiveTab('students'); }}
+          className={`border border-slate-850 p-4 rounded-2xl text-center cursor-pointer hover:bg-slate-800/40 transition-colors ${statusFilter === 'Placed' ? 'bg-slate-800/60 shadow-inner' : 'bg-slate-900/40'}`}
+        >
           <CheckCircle className="h-4 w-4 mx-auto text-emerald-400" />
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mt-2">Placed</span>
           <p className="text-xl font-extrabold text-emerald-450 mt-1">{projectStats.totalHired}</p>
         </div>
         {/* Inactive */}
-        <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-2xl text-center">
+        <div 
+          onClick={() => { setStatusFilter('Inactive'); setActiveTab('students'); }}
+          className={`border border-slate-850 p-4 rounded-2xl text-center cursor-pointer hover:bg-slate-800/40 transition-colors ${statusFilter === 'Inactive' ? 'bg-slate-800/60 shadow-inner' : 'bg-slate-900/40'}`}
+        >
           <XCircle className="h-4 w-4 mx-auto text-rose-500" />
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mt-2">Inactive</span>
           <p className="text-xl font-extrabold text-white mt-1">{projectStats.totalInactive}</p>
         </div>
         {/* Willingly Leave */}
-        <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-2xl text-center">
+        <div 
+          onClick={() => { setStatusFilter('Leave'); setActiveTab('students'); }}
+          className={`border border-slate-850 p-4 rounded-2xl text-center cursor-pointer hover:bg-slate-800/40 transition-colors ${statusFilter === 'Leave' ? 'bg-slate-800/60 shadow-inner' : 'bg-slate-900/40'}`}
+        >
           <HelpCircle className="h-4 w-4 mx-auto text-slate-500" />
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mt-2">Leave</span>
           <p className="text-xl font-extrabold text-white mt-1">{projectStats.willinglyLeave}</p>
         </div>
         {/* In Risk */}
-        <div className="bg-slate-900/40 border border-slate-850 p-4 rounded-2xl text-center">
+        <div 
+          onClick={() => { setStatusFilter('At Risk'); setActiveTab('students'); }}
+          className={`border border-slate-850 p-4 rounded-2xl text-center cursor-pointer hover:bg-slate-800/40 transition-colors ${statusFilter === 'At Risk' ? 'bg-slate-800/60 shadow-inner' : 'bg-slate-900/40'}`}
+        >
           <AlertTriangle className="h-4 w-4 mx-auto text-amber-500" />
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block mt-2">At Risk</span>
           <p className="text-xl font-extrabold text-amber-400 mt-1">{projectStats.totalRisk}</p>
@@ -844,20 +926,37 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h3 className="text-sm font-bold text-slate-200">Cohort Enrolled Students</h3>
+                <h3 className="text-sm font-bold text-slate-200">
+                  Cohort Enrolled Students
+                  {statusFilter !== 'All' && (
+                    <span className="ml-3 text-[10px] bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded-md uppercase tracking-wider">
+                      Filter: {statusFilter}
+                    </span>
+                  )}
+                </h3>
                 <p className="text-xs text-slate-500 mt-1">Review profiles, grades, streaks and placement status.</p>
               </div>
 
-              {/* Search box */}
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Search students..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full text-xs bg-slate-950/60 border border-slate-850 focus:border-indigo-650 text-slate-200 pl-9 pr-4 py-2.5 rounded-xl outline-none placeholder:text-slate-650"
-                />
+              <div className="flex items-center gap-3">
+                {statusFilter !== 'All' && (
+                  <button 
+                    onClick={() => setStatusFilter('All')}
+                    className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white transition-colors"
+                  >
+                    Clear Filter
+                  </button>
+                )}
+                {/* Search box */}
+                <div className="relative w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search students..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full text-xs bg-slate-950/60 border border-slate-850 focus:border-indigo-650 text-slate-200 pl-9 pr-4 py-2.5 rounded-xl outline-none placeholder:text-slate-650"
+                  />
+                </div>
               </div>
             </div>
 
@@ -942,7 +1041,21 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                         </select>
                       </td>
 
-                      <td className="p-4 text-right">
+                      <td className="p-4 text-right flex items-center justify-end gap-2">
+                        {student.riskStatus === 'High' && (
+                          <button
+                            onClick={() => handleSendAIEmail(student._id)}
+                            disabled={sendingEmailId === student._id}
+                            className="p-2 hover:bg-rose-500/20 rounded-xl text-rose-450 transition-colors inline-flex items-center gap-1.5 text-[10px] font-bold uppercase disabled:opacity-50"
+                          >
+                            {sendingEmailId === student._id ? (
+                              <div className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <Send className="h-3.5 w-3.5" />
+                            )}
+                            <span>AI Alert</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => { setSelectedStudent(student); setShowDrawer(true); }}
                           className="p-2 hover:bg-slate-800 rounded-xl text-indigo-400 hover:text-indigo-300 transition-colors inline-flex items-center gap-1.5 text-xs font-semibold"
@@ -1184,6 +1297,9 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                 <div>
                   <h3 className="font-extrabold text-white text-lg">{selectedStudent.name}</h3>
                   <span className="text-xs text-slate-400 block mt-0.5">{selectedStudent.email}</span>
+                  {selectedStudent.phoneNumber && (
+                    <span className="text-[10px] text-slate-500 block mt-0.5">{selectedStudent.phoneNumber}</span>
+                  )}
                 </div>
               </div>
               <button 
@@ -1196,6 +1312,42 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
             {/* Main Area */}
             <div className="p-6 flex-1 space-y-6 overflow-y-auto">
+              {/* Status Badges */}
+              <div className="flex flex-wrap gap-2">
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border ${
+                  selectedStudent.tier === 'Tier A' ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' :
+                  selectedStudent.tier === 'Tier B' ? 'bg-slate-400/10 border-slate-400/20 text-slate-350' :
+                  'bg-orange-800/10 border-orange-800/20 text-orange-450'
+                }`}>
+                  {selectedStudent.tier}
+                </span>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border ${
+                  selectedStudent.riskStatus === 'High' ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' :
+                  selectedStudent.riskStatus === 'Low' ? 'bg-slate-800 border-slate-700 text-slate-400' :
+                  'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                }`}>
+                  Risk: {selectedStudent.riskStatus}
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-300">
+                  {selectedStudent.hiredStatus}
+                </span>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border ${
+                  selectedStudent.activeStatus === 'Active' ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                }`}>
+                  {selectedStudent.activeStatus}
+                </span>
+                {selectedStudent.attendanceStreak > 0 && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
+                    🔥 {selectedStudent.attendanceStreak} Day Streak
+                  </span>
+                )}
+                {selectedStudent.absentStreak > 0 && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border bg-rose-500/10 border-rose-500/20 text-rose-400">
+                    ⚠️ {selectedStudent.absentStreak} Day Absent
+                  </span>
+                )}
+              </div>
+
               {/* Profile links cards */}
               <div className="grid grid-cols-3 gap-3">
                 {selectedStudent.profiles.github ? (
@@ -1280,30 +1432,36 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                   {/* Color Status Legend */}
                   <div className="flex gap-4 text-[9px] text-slate-500 mt-4 justify-center border-t border-slate-900/60 pt-3 font-semibold uppercase tracking-wider">
                     <div className="flex items-center gap-1.5">
-                      <div className="h-2.5 w-2.5 rounded bg-emerald-500/20 border border-emerald-500/30"></div>
-                      <span>Present</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-2.5 w-2.5 rounded bg-rose-500/20 border border-rose-500/30"></div>
-                      <span>Absent</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-2.5 w-2.5 rounded bg-amber-500/20 border border-amber-500/30"></div>
-                      <span>Leave (- Pts)</span>
-                    </div>
+                       <div className="h-2.5 w-2.5 rounded bg-emerald-500/20 border border-emerald-500/30"></div>
+                       <span>Present</span>
+                     </div>
+                     <div className="flex items-center gap-1.5">
+                       <div className="h-2.5 w-2.5 rounded bg-rose-500/20 border border-rose-500/30"></div>
+                       <span>Absent</span>
+                     </div>
+                     <div className="flex items-center gap-1.5">
+                       <div className="h-2.5 w-2.5 rounded bg-amber-500/20 border border-amber-500/30"></div>
+                       <span>Leave (- Pts)</span>
+                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Performance indicators */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-slate-950/40 border border-slate-800 p-4 rounded-2xl text-center">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Points</span>
+                  <p className="text-2xl font-extrabold text-white mt-1">{selectedStudent.totalMark}</p>
+                </div>
                 <div className="bg-slate-950/40 border border-slate-800 p-4 rounded-2xl text-center">
                   <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Mock Score</span>
                   <p className="text-2xl font-extrabold text-white mt-1">{selectedStudent.mockInterviewScore}%</p>
                 </div>
                 <div className="bg-slate-950/40 border border-slate-800 p-4 rounded-2xl text-center">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Performance Rank</span>
-                  <p className="text-2xl font-extrabold text-indigo-400 mt-1">#12</p>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Rank</span>
+                  <p className="text-2xl font-extrabold text-indigo-400 mt-1">
+                    #{leaderboardSorted.findIndex(s => s._id === selectedStudent._id) + 1}
+                  </p>
                 </div>
               </div>
 

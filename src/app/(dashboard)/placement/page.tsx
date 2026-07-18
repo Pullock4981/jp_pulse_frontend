@@ -247,7 +247,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
       <div className="bg-slate-900/25 border border-slate-800/80 rounded-3xl p-6 shadow-xl min-h-[300px]">
         {/* Scorer Workspace */}
         {activeSubTab === 'scorer' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="space-y-6">
             <div className="space-y-4">
               <div>
                 <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">AI Profile Screening</h4>
@@ -268,7 +268,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               </form>
             </div>
 
-            <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl min-h-[200px] flex items-center justify-center text-center">
+            <div className="bg-slate-950/40 border border-slate-850 p-6 rounded-2xl min-h-[300px] flex items-center justify-center text-center">
               {scoringResume ? (
                 <div className="h-6 w-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
               ) : resumeScoreResult ? (
@@ -299,7 +299,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
         {/* Matchmaker Workspace */}
         {activeSubTab === 'matchmaker' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="space-y-6">
             <div className="space-y-4">
               <div>
                 <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">AI Job Description Matcher</h4>
@@ -308,7 +308,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               <form onSubmit={handleMatchCandidatesAI} className="space-y-4">
                 <textarea
                   required
-                  rows={5}
+                  rows={8}
                   placeholder="Paste recruiter job requirements (JD)..."
                   value={jobDescription}
                   onChange={(e) => setJobDescription(e.target.value)}
@@ -320,7 +320,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               </form>
             </div>
 
-            <div className="bg-slate-950/40 border border-slate-850 p-5 rounded-2xl min-h-[200px]">
+            <div className="bg-slate-950/40 border border-slate-850 p-6 rounded-2xl min-h-[300px]">
               {matchingCandidates ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="h-6 w-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
@@ -348,18 +348,18 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
         {/* Synthesizer Workspace */}
         {activeSubTab === 'synthesizer' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="space-y-4">
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Log Report Synthesizer</h4>
+                <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wider">Log Report Synthesizer</h4>
                 <p className="text-xs text-slate-500 mt-1">Aggregates mentor call logs into performance summary reports for {selectedProject?.name}.</p>
               </div>
-              <button onClick={handleSynthesizeReportAI} disabled={synthesizingReport} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-lg shadow-indigo-600/10">
+              <button onClick={handleSynthesizeReportAI} disabled={synthesizingReport} className="bg-indigo-600 text-white px-6 py-3 rounded-xl text-xs font-bold transition-all disabled:opacity-50 shadow-lg shadow-indigo-600/10 shrink-0">
                 {synthesizingReport ? 'Synthesizing...' : 'Synthesize Report'}
               </button>
             </div>
 
-            <div className="lg:col-span-2 bg-slate-950/40 border border-slate-850 p-6 rounded-2xl min-h-[250px] flex flex-col justify-between">
+            <div className="bg-slate-950/40 border border-slate-850 p-6 rounded-2xl min-h-[400px] flex flex-col justify-between">
               {synthesizingReport ? (
                 <div className="h-full flex items-center justify-center self-center">
                   <div className="h-6 w-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
@@ -373,7 +373,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                       <span>{copiedReport ? 'Copied' : 'Copy'}</span>
                     </button>
                   </div>
-                  <div className="bg-slate-900 border border-slate-850 p-4 rounded-xl text-[11px] font-mono text-slate-400 max-h-[200px] overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                  <div className="bg-slate-900 border border-slate-850 p-6 rounded-xl text-[13px] font-mono text-slate-300 max-h-[500px] overflow-y-auto whitespace-pre-wrap leading-relaxed">
                     {reportMarkdown}
                   </div>
                 </div>
