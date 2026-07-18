@@ -18,7 +18,7 @@ import {
   Zap
 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://hackathon-backend-sandy.vercel.app/api/v1';
 
 export default function AttendanceFormPage() {
   const { formId } = useParams() as { formId: string };

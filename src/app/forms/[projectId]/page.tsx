@@ -54,7 +54,7 @@ export default function StudentPublicFormPage() {
   useEffect(() => {
     async function fetchFormSchema() {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://hackathon-backend-sandy.vercel.app/api/v1';
         const res = await fetch(`${backendUrl}/public/projects/${projectId}/form`);
         const result = await res.json();
         
@@ -111,7 +111,7 @@ export default function StudentPublicFormPage() {
     setError(null);
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://hackathon-backend-sandy.vercel.app/api/v1';
       const res = await fetch(`${backendUrl}/public/projects/${projectId}/form/submit`, {
         method: 'POST',
         headers: {
