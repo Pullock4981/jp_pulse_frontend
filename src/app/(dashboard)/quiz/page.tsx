@@ -119,7 +119,14 @@ export default function GlobalQuizDashboard() {
 
   const handleGenerateQuizAI = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quizTopic || !selectedProjectId) return;
+    if (!selectedProjectId) {
+      setQuizMsg({ type: 'error', text: 'Please create or select a project first to assign this quiz to.' });
+      return;
+    }
+    if (!quizTopic) {
+      setQuizMsg({ type: 'error', text: 'Please select a quiz topic.' });
+      return;
+    }
 
     setGeneratingQuiz(true);
     setQuizMsg({ type: '', text: '' });
@@ -252,6 +259,7 @@ export default function GlobalQuizDashboard() {
           </button>
 
           <button 
+            onClick={() => document.getElementById('quiz-creator-form')?.scrollIntoView({ behavior: 'smooth' })}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-md hover:opacity-90 transition-opacity cursor-pointer"
             style={{ background: 'linear-gradient(135deg, #A855F7, #7C3AED)' }}
           >
@@ -285,7 +293,7 @@ export default function GlobalQuizDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left: AI Quiz Creator */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100" id="quiz-creator-form">
           <div className="flex items-center gap-3 mb-6">
             <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center">
               <Sparkles className="h-5 w-5 text-purple-600" />

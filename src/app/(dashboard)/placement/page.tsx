@@ -26,7 +26,7 @@ export default function GlobalPlacementDashboard() {
   // Scorer States
   const [resumeUrl, setResumeUrl] = useState('');
   const [isScoring, setIsScoring] = useState(false);
-  const [scoreResult, setScoreResult] = useState(false);
+  const [scoreResult, setScoreResult] = useState<any>(null);
 
   // Matchmaker States
   const [jobDescription, setJobDescription] = useState('');
@@ -37,14 +37,21 @@ export default function GlobalPlacementDashboard() {
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [reportResult, setReportResult] = useState(false);
 
-  const handleScore = (e: React.FormEvent) => {
+  const handleScore = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resumeUrl) return;
     setIsScoring(true);
-    setTimeout(() => {
+    try {
+      const res = await apiRequest('/ai/resume-score', {
+        method: 'POST',
+        body: JSON.stringify({ resumeUrl })
+      });
+      setScoreResult(res.data);
+    } catch (error) {
+      console.error(error);
+    } finally {
       setIsScoring(false);
-      setScoreResult(true);
-    }, 1500);
+    }
   };
 
   const handleMatch = () => {
@@ -123,7 +130,7 @@ export default function GlobalPlacementDashboard() {
           </div>
 
           {/* Results Area */}
-          {(scoreResult || true) && (
+          {scoreResult && (
             <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
               
               {/* Left Card - Score */}
@@ -135,8 +142,8 @@ export default function GlobalPlacementDashboard() {
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                     <circle cx="50" cy="50" r="45" stroke="#F1F5F9" strokeWidth="8" fill="none" />
                     <circle cx="50" cy="50" r="45" stroke="#5B21B6" strokeWidth="8" fill="none" 
-                      strokeDasharray="283" strokeDashoffset="34" strokeLinecap="round" className="text-[#0D9488]" 
-                      style={{ stroke: 'url(#gradient)' }}
+                      strokeDasharray="283" strokeDashoffset={283 - (283 * (scoreResult.score || 0)) / 100} strokeLinecap="round" className="text-[#0D9488]" 
+                      style={{ stroke: 'url(#gradient)', transition: 'stroke-dashoffset 1s ease-out' }}
                     />
                     <defs>
                       <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -146,14 +153,14 @@ export default function GlobalPlacementDashboard() {
                     </defs>
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-5xl font-black text-[#5B21B6] leading-none mb-1">88</span>
+                    <span className="text-5xl font-black text-[#5B21B6] leading-none mb-1">{scoreResult.score || 0}</span>
                     <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">OUT OF 100</span>
                   </div>
                 </div>
 
-                <h3 className="text-xl font-bold text-gray-900 mb-3">High Potential</h3>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">{scoreResult.feedback || "Needs Review"}</h3>
                 <p className="text-xs text-gray-500 font-medium leading-relaxed max-w-[240px]">
-                  The candidate demonstrates strong technical proficiency and project depth.
+                  Based on AI analysis, this resume has been scored according to ATS standards.
                 </p>
               </div>
 
@@ -170,18 +177,12 @@ export default function GlobalPlacementDashboard() {
                       <h4 className="text-[11px] font-black uppercase tracking-widest text-emerald-600">KEY STRENGTHS</h4>
                     </div>
                     <ul className="space-y-5">
-                      <li className="flex gap-3 text-sm text-gray-600 font-medium leading-relaxed">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 mt-2"></span>
-                        Exceptional full-stack architecture demonstrated in 'Avengers Portal' project.
-                      </li>
-                      <li className="flex gap-3 text-sm text-gray-600 font-medium leading-relaxed">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 mt-2"></span>
-                        Strong emphasis on clean code principles and unit testing documentation.
-                      </li>
-                      <li className="flex gap-3 text-sm text-gray-600 font-medium leading-relaxed">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 mt-2"></span>
-                        Clear progression of responsibility across three distinct internships.
-                      </li>
+                      {scoreResult.strengths?.map((str: string, i: number) => (
+                        <li key={i} className="flex gap-3 text-sm text-gray-600 font-medium leading-relaxed">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 mt-2"></span>
+                          {str}
+                        </li>
+                      ))}
                     </ul>
                   </div>
 
@@ -194,18 +195,12 @@ export default function GlobalPlacementDashboard() {
                       <h4 className="text-[11px] font-black uppercase tracking-widest text-amber-600">AREAS TO REFINE</h4>
                     </div>
                     <ul className="space-y-5">
-                      <li className="flex gap-3 text-sm text-gray-600 font-medium leading-relaxed">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0 mt-2"></span>
-                        Lack of cloud infrastructure or DevOps (Docker/K8s) mentions.
-                      </li>
-                      <li className="flex gap-3 text-sm text-gray-600 font-medium leading-relaxed">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0 mt-2"></span>
-                        Summary section is slightly generic; could benefit from more AI/ML focus.
-                      </li>
-                      <li className="flex gap-3 text-sm text-gray-600 font-medium leading-relaxed">
-                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0 mt-2"></span>
-                        Portfolio links are present but lead to 404 or incomplete pages.
-                      </li>
+                      {scoreResult.issues?.map((issue: any, i: number) => (
+                        <li key={i} className="flex gap-3 text-sm text-gray-600 font-medium leading-relaxed">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0 mt-2"></span>
+                          {issue.problem}
+                        </li>
+                      ))}
                     </ul>
                   </div>
                 </div>
@@ -286,7 +281,7 @@ export default function GlobalPlacementDashboard() {
                 </div>
               </div>
 
-              {(matchResult || true) && (
+              {(matchResult) && (
                 <div className="space-y-4">
                   {/* Card 1 */}
                   <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
@@ -460,7 +455,7 @@ export default function GlobalPlacementDashboard() {
 
           {/* Right Content */}
           <div className="lg:col-span-9">
-            {(reportResult || true) && (
+            {(reportResult) && (
               <div className="bg-white rounded-[32px] p-10 shadow-sm border border-gray-100 min-h-[600px]">
                 
                 {/* Header Actions */}
