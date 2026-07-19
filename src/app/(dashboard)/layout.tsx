@@ -9,7 +9,7 @@ import { Zap } from 'lucide-react';
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
-  const [user, setUser] = useState<any>({ name: 'Demo Mentor', role: 'mentor' });
+  const [user, setUser] = useState<any>({ name: 'Loading...', role: 'mentor' });
   const pathname = usePathname();
 
   useEffect(() => {
@@ -24,11 +24,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     try {
       const parsedUser = JSON.parse(storedUser);
       setUser(parsedUser);
-      
-      if (pathname === '/admin' && parsedUser.role !== 'admin') {
-        router.push('/');
+
+      // Route guard: mentor cannot access /admin routes
+      if (parsedUser.role !== 'admin' && pathname.startsWith('/admin')) {
+        router.push('/mentor');
         return;
       }
+
+      // Route guard: redirect mentor from root / to role-based home
+      if (pathname === '/') {
+        if (parsedUser.role !== 'admin') {
+          router.push('/mentor');
+          return;
+        }
+      }
+
     } catch {
       router.push('/login');
       return;
@@ -39,14 +49,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!authenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center relative overflow-hidden"
-        style={{ background: 'var(--background)' }}>
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="dark-bg-layer" />
-          <div className="app-glow-purple" />
-          <div className="app-glow-orange" />
-          <div className="app-bg-layer1" />
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-white">
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div
+            className="absolute inset-0 z-0"
+            style={{
+              background: '#ffffff',
+              backgroundImage: `radial-gradient(circle at top center, rgba(173, 109, 244, 0.4), transparent 70%)`,
+              filter: 'blur(80px)',
+              backgroundRepeat: 'no-repeat',
+            }}
+          />
+          <div
+            className="absolute inset-0 z-0 opacity-75"
+            style={{
+              backgroundImage: `linear-gradient(to right, #e2e8f0 1px, transparent 1px), linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)`,
+              backgroundSize: '32px 32px',
+              WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 100% 0%, #000 50%, transparent 90%)',
+              maskImage: 'radial-gradient(ellipse 80% 80% at 100% 0%, #000 50%, transparent 90%)',
+            }}
+          />
         </div>
+
         <div className="relative z-10 flex flex-col items-center gap-5">
           <div className="relative">
             <div className="h-16 w-16 rounded-3xl flex items-center justify-center shadow-2xl"
@@ -67,23 +91,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="flex h-screen relative overflow-hidden transition-colors duration-500"
-      style={{ background: 'var(--background)' }}>
+    <div className="flex h-screen relative overflow-hidden transition-colors duration-500 bg-white">
       {/* Premium Background */}
       <div className="absolute inset-0 z-0 pointer-events-none">
-        <div className="dark-bg-layer" />
-        <div className="app-bg-layer1" />
-        <div className="app-glow-purple" />
-        <div className="app-glow-orange" />
-        <div className="app-glow-pink" />
+        <div
+          className="absolute inset-0 z-0"
+          style={{
+            background: '#ffffff',
+            backgroundImage: `radial-gradient(circle at top center, rgba(173, 109, 244, 0.4), transparent 70%)`,
+            filter: 'blur(80px)',
+            backgroundRepeat: 'no-repeat',
+          }}
+        />
+        <div
+          className="absolute inset-0 z-0 opacity-75"
+          style={{
+            backgroundImage: `linear-gradient(to right, #e2e8f0 1px, transparent 1px), linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)`,
+            backgroundSize: '32px 32px',
+            WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 100% 0%, #000 50%, transparent 90%)',
+            maskImage: 'radial-gradient(ellipse 80% 80% at 100% 0%, #000 50%, transparent 90%)',
+          }}
+        />
       </div>
 
       <Sidebar userRole={user?.role} userName={user?.name} />
 
       <div className="flex-1 flex flex-col min-w-0 relative z-10">
         <TopNav />
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8"
-          style={{ background: 'transparent' }}>
+        <main className="flex-1 overflow-y-auto p-6 lg:p-8" style={{ background: 'transparent' }}>
           {children}
         </main>
       </div>

@@ -1,19 +1,20 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
+import { createPortal } from 'react-dom';
 import { apiRequest } from '@/utils/api';
 import Link from 'next/link';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { 
-  Users, 
-  CheckCircle, 
-  XCircle, 
-  AlertTriangle, 
+import {
+  Users,
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
   ArrowLeft,
-  HelpCircle, 
-  Calendar, 
-  FileDown, 
+  HelpCircle,
+  Calendar,
+  FileDown,
   MessageSquare,
   Award,
   BookOpen,
@@ -51,7 +52,18 @@ import {
   AlignLeft,
   CheckSquare,
   Key,
-  ChevronDown
+  ChevronDown,
+  SlidersHorizontal,
+  MoreVertical,
+  Filter,
+  Download,
+  Rocket,
+  BarChart,
+  UserPlus,
+  UserMinus,
+  Target,
+  Plane,
+  LayoutDashboard
 } from 'lucide-react';
 
 // Brand icons as inline SVGs
@@ -140,6 +152,49 @@ interface MatchedCandidate {
   matchingSkills: string[];
 }
 
+const CircularProgressGauge = ({ value, color1, color2, label }: { value: number; color1: string; color2: string; label: string }) => {
+  const radius = 28;
+  const strokeDash = 2 * Math.PI * radius; // ~176
+  const strokeOffset = strokeDash - (value / 100) * strokeDash;
+
+  return (
+    <div className="relative flex flex-col items-center justify-center shrink-0">
+      <svg className="w-20 h-20" viewBox="0 0 64 64">
+        {/* Background circle */}
+        <circle
+          cx="32"
+          cy="32"
+          r={radius}
+          fill="none"
+          stroke="#f1f5f9"
+          strokeWidth="5"
+        />
+        {/* Progress circle */}
+        <circle
+          cx="32"
+          cy="32"
+          r={radius}
+          fill="none"
+          stroke={`url(#circleGlowGrad-${label.replace(/\s+/g, '')})`}
+          strokeWidth="5"
+          strokeLinecap="round"
+          strokeDasharray={strokeDash}
+          strokeDashoffset={strokeOffset}
+          transform="rotate(-90 32 32)"
+          style={{ transition: 'stroke-dashoffset 0.8s ease-in-out' }}
+        />
+        <defs>
+          <linearGradient id={`circleGlowGrad-${label.replace(/\s+/g, '')}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={color1} />
+            <stop offset="100%" stopColor={color2} />
+          </linearGradient>
+        </defs>
+      </svg>
+      <span className="absolute text-xs font-black text-gray-900">{value}%</span>
+    </div>
+  );
+};
+
 export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ projectId: string }> }) {
   const resolvedParams = use(params);
   const projectId = resolvedParams.projectId;
@@ -148,9 +203,15 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
   const [project, setProject] = useState<any>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview'); // Tab options: overview, students, attendance, tasks, leaderboard, quiz, placement
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Page widgets summary stats
   const [projectStats, setProjectStats] = useState({
@@ -204,6 +265,23 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
 
   // Operations Matrix states (Attendance & Tasks)
   const [dates, setDates] = useState<string[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [dateStartIndex, setDateStartIndex] = useState(0);
+  const datesPerPage = 5;
+
+  useEffect(() => {
+    if (dates.length > 0 && !selectedMonth) {
+      const latestMonth = dates[dates.length - 1]?.substring(0, 7);
+      setSelectedMonth(latestMonth || '');
+    }
+  }, [dates, selectedMonth]);
+
+  useEffect(() => {
+    if (dates.length > 0) {
+      setDateStartIndex(Math.max(0, dates.length - datesPerPage));
+    }
+  }, [dates]);
+
   const [attendanceMatrix, setAttendanceMatrix] = useState<Record<string, Record<string, string>>>({});
   const [taskMatrix, setTaskMatrix] = useState<Record<string, Record<string, string>>>({});
   const [matrixSavingState, setMatrixSavingState] = useState<Record<string, boolean>>({});
@@ -250,7 +328,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
     try {
       const stored = sessionStorage.getItem('user');
       if (stored) setUserRole(JSON.parse(stored).role || 'mentor');
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -260,7 +338,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      
+
       // 1. Fetch project info
       const projRes = await apiRequest(`/projects/${projectId}`);
       setProject(projRes.data);
@@ -269,7 +347,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
       const studRes = await apiRequest(`/projects/${projectId}/students`);
       const fetchedStudents = studRes.data || [];
       setStudents(fetchedStudents);
-      
+
       // Calculate Stats
       calculateStats(fetchedStudents, projRes.data);
 
@@ -277,7 +355,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
       try {
         const attDataRes = await apiRequest(`/projects/${projectId}/attendance`);
         const fetchedAttendances = attDataRes.data || [];
-        
+
         const attData: Record<string, Record<string, string>> = {};
         const uniqueDates = new Set<string>();
 
@@ -287,8 +365,8 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
 
         fetchedAttendances.forEach((record: any) => {
           if (record.student && typeof record.student === 'object' && record.student._id) {
-             // Populate returns object
-             record.student = record.student._id;
+            // Populate returns object
+            record.student = record.student._id;
           }
           if (attData[record.student]) {
             const dateStr = new Date(record.date).toISOString().split('T')[0];
@@ -300,7 +378,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
         const sortedDates = Array.from(uniqueDates).sort();
         setDates(sortedDates);
         setAttendanceMatrix(attData);
-        
+
         // Mock task matrix for now
         const tskData: Record<string, Record<string, string>> = {};
         fetchedStudents.forEach((student: any) => {
@@ -343,160 +421,11 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
       }
 
     } catch (err: any) {
-      console.warn('Backend failed, loading mock system workspace:', err.message);
-      loadMockWorkspaceData();
+      console.error('Failed to load workspace data:', err.message);
+      setError('Failed to load project details. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const loadMockWorkspaceData = () => {
-    setProject({
-      _id: projectId,
-      name: 'Albatross Boot-camp',
-      batch: 'Batch 4',
-      description: 'Full stack web development intensive training course',
-    });
-
-    const mockStudents: Student[] = [
-      {
-        _id: 'stud-1',
-        name: 'Jane Doe',
-        email: 'jane.doe@example.com',
-        phoneNumber: '+1-555-0199',
-        tier: 'Tier A',
-        riskStatus: 'On Track',
-        activeStatus: 'Active',
-        hiredStatus: 'Hired',
-        totalAttendance: 18,
-        totalAbsent: 2,
-        attendanceStreak: 12,
-        absentStreak: 0,
-        totalAttendanceMark: 18,
-        totalTaskMark: 25,
-        totalMark: 43,
-        mockInterviewScore: 85,
-        profiles: {
-          resume: 'https://example.com/jane-cv.pdf',
-          github: 'https://github.com/janedoe',
-          linkedin: 'https://linkedin.com/in/janedoe',
-          resumeReady: true,
-          githubReady: true,
-          linkedinReady: true
-        },
-        lastUpdateNote: 'Discussed resume formatting. GitHub profile is excellent.',
-        lastUpdateDate: '2026-07-15T12:00:00Z'
-      },
-      {
-        _id: 'stud-2',
-        name: 'Alice Johnson',
-        email: 'alice.j@example.com',
-        phoneNumber: '+1-555-0245',
-        tier: 'Tier B',
-        riskStatus: 'Low',
-        activeStatus: 'Active',
-        hiredStatus: 'In interview',
-        totalAttendance: 15,
-        totalAbsent: 5,
-        attendanceStreak: 3,
-        absentStreak: 0,
-        totalAttendanceMark: 15,
-        totalTaskMark: 18,
-        totalMark: 33,
-        mockInterviewScore: 72,
-        profiles: {
-          resume: 'https://example.com/alice-cv.pdf',
-          github: 'https://github.com/alicej',
-          linkedin: 'https://linkedin.com/in/alicej',
-          resumeReady: true,
-          githubReady: true,
-          linkedinReady: true
-        },
-        lastUpdateNote: 'Working on mock interviews prep.',
-        lastUpdateDate: '2026-07-16T14:30:00Z'
-      },
-      {
-        _id: 'stud-3',
-        name: 'Bob Miller',
-        email: 'bob.m@example.com',
-        phoneNumber: '+1-555-0789',
-        tier: 'Tier C',
-        riskStatus: 'High',
-        activeStatus: 'Active',
-        hiredStatus: 'Looking',
-        totalAttendance: 8,
-        totalAbsent: 12,
-        attendanceStreak: 0,
-        absentStreak: 5,
-        totalAttendanceMark: -4,
-        totalTaskMark: 5,
-        totalMark: 1,
-        mockInterviewScore: 45,
-        profiles: {
-          resume: '',
-          github: 'https://github.com/bobmiller',
-          linkedin: '',
-          resumeReady: false,
-          githubReady: true,
-          linkedinReady: false
-        },
-        lastUpdateNote: 'Absent for consecutive classes. Tried to contact but no reply.',
-        lastUpdateDate: '2026-07-17T09:00:00Z'
-      }
-    ];
-
-    setStudents(mockStudents);
-    calculateStats(mockStudents, { _id: projectId, name: 'Albatross Boot-camp', tierConfig: { enableTiers: true } });
-    
-    // Set dates and mock matrix
-    const generatedDates: string[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      generatedDates.push(d.toISOString().split('T')[0]);
-    }
-    setDates(generatedDates);
-
-    const attData: Record<string, Record<string, string>> = {};
-    const tskData: Record<string, Record<string, string>> = {};
-
-    mockStudents.forEach(student => {
-      attData[student._id] = {};
-      tskData[student._id] = {};
-      
-      generatedDates.forEach((date, index) => {
-        if (student._id === 'stud-3') {
-          attData[student._id][date] = index > 3 ? 'Absent' : 'Present';
-        } else {
-          attData[student._id][date] = index === 2 ? 'Leave' : index === 5 ? 'Absent' : 'Present';
-        }
-        tskData[student._id][date] = index % 3 === 0 ? 'Incomplete' : 'Complete';
-      });
-    });
-
-    setAttendanceMatrix(attData);
-    setTaskMatrix(tskData);
-    
-    setQuizzes([
-      {
-        _id: 'quiz-1',
-        title: 'React Fundamentals Quiz',
-        status: 'Live',
-        durationMinutes: 15,
-        questions: [
-          { questionText: 'What is JSX?', options: ['JavaScript XML', 'JSON XML', 'Java Syntax Extension'], correctAnswer: 'JavaScript XML' }
-        ],
-        avgScore: 78.5
-      },
-      {
-        _id: 'quiz-2',
-        title: 'JavaScript Async Operations',
-        status: 'Draft',
-        durationMinutes: 20,
-        questions: [],
-        avgScore: 0
-      }
-    ]);
   };
 
   const calculateStats = (studentList: Student[], projectInfo: any) => {
@@ -614,7 +543,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
     try {
       await apiRequest(`/students/${selectedStudent._id}`, {
         method: 'PUT',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           lastUpdateNote: updatedNote,
           lastUpdateDate: updatedDate
         })
@@ -659,7 +588,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
       return;
     }
     const cleanId = newFieldName.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
+
     // Check duplicates
     if (customFields.some(f => f.id === cleanId)) {
       alert('A field with this identifier already exists.');
@@ -855,7 +784,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
           const firstSheet = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheet];
           const jsonData = XLSX.utils.sheet_to_json(worksheet);
-          
+
           processBulkAddJson(jsonData);
         } catch (err: any) {
           setBulkAddMsg({ type: 'error', text: `Failed to parse Excel file: ${err.message}` });
@@ -947,7 +876,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
           const firstSheet = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheet];
           const jsonData = XLSX.utils.sheet_to_json(worksheet);
-          
+
           processSpreadsheetJson(jsonData);
         } catch (err: any) {
           setImportDetailsMsg({ type: 'error', text: `Failed to parse Excel file: ${err.message}` });
@@ -1018,10 +947,10 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
       Object.keys(row).forEach(k => {
         const cleanK = k.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
         if (
-          cleanK === 'email' || 
-          cleanK === 'mail' || 
-          cleanK === 'emailaddress' || 
-          cleanK === 'yourcourseemailaddress' || 
+          cleanK === 'email' ||
+          cleanK === 'mail' ||
+          cleanK === 'emailaddress' ||
+          cleanK === 'yourcourseemailaddress' ||
           cleanK === 'courseemail'
         ) {
           rowEmail = String(row[k]).trim();
@@ -1031,7 +960,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
       if (!rowEmail) return;
 
       const updateObj: any = { email: rowEmail };
-      
+
       // Look for other columns matching form fields list
       if (formConfig && formConfig.fields) {
         formConfig.fields.forEach((field: any) => {
@@ -1109,11 +1038,41 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
     }
   };
 
+  const handleSetTaskStatus = async (studentId: string, date: string, nextStatus: string) => {
+    const currentStatus = taskMatrix[studentId]?.[date] || 'Incomplete';
+    if (currentStatus === nextStatus) return;
+
+    setTaskMatrix(prev => ({
+      ...prev,
+      [studentId]: { ...prev[studentId], [date]: nextStatus }
+    }));
+
+    const cellId = `tsk-${studentId}-${date}`;
+    setMatrixSavingState(prev => ({ ...prev, [cellId]: true }));
+
+    try {
+      await apiRequest(`/projects/${projectId}/tasks`, {
+        method: 'POST',
+        body: JSON.stringify({ studentId, date, title: `Daily Assignment ${date}`, status: nextStatus })
+      });
+      updateLocalStudentMarks(studentId, 'task', currentStatus, nextStatus);
+    } catch (err) {
+      // Revert if error
+      setTaskMatrix(prev => ({
+        ...prev,
+        [studentId]: { ...prev[studentId], [date]: currentStatus }
+      }));
+    } finally {
+      setTimeout(() => setMatrixSavingState(prev => ({ ...prev, [cellId]: false })), 200);
+    }
+  };
+
+
   const updateLocalStudentMarks = (studentId: string, type: 'attendance' | 'task', oldVal: string, newVal: string) => {
     setStudents(prev => {
       const updatedStudents = prev.map(s => {
         if (s._id !== studentId) return s;
-        
+
         let attDiff = 0;
         let tskDiff = 0;
         let attendanceDaysDiff = 0;
@@ -1123,10 +1082,10 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
           const oldMark = oldVal === 'Present' ? 1 : oldVal === 'Absent' ? -1 : 0;
           const newMark = newVal === 'Present' ? 1 : newVal === 'Absent' ? -1 : 0;
           attDiff = newMark - oldMark;
-          
+
           if (oldVal === 'Present') attendanceDaysDiff -= 1;
           else if (oldVal === 'Absent') absentDaysDiff -= 1;
-          
+
           if (newVal === 'Present') attendanceDaysDiff += 1;
           else if (newVal === 'Absent') absentDaysDiff += 1;
         } else {
@@ -1162,7 +1121,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
     try {
       await new Promise(resolve => setTimeout(resolve, 1500));
       const title = `${quizTopic.charAt(0).toUpperCase() + quizTopic.slice(1)} AI Quiz`;
-      
+
       const newQuizBody = {
         title,
         status: 'Draft' as const,
@@ -1286,7 +1245,7 @@ export default function ProjectUnifiedDashboard({ params }: { params: Promise<{ 
 **Batch:** ${project?.batch || 'Batch 4'}
 
 ## Executive Summary
-This week, cohort average attendance stabilized at **84.5%**. Students demonstrated strong engagement during the Express.js validation sessions.
+This week, project average attendance stabilized at **84.5%**. Students demonstrated strong engagement during the Express.js validation sessions.
 
 ## Top Performers
 - **Jane Doe:** Ranked #1 on the leaderboard with 43 points. Excelled in mock interviews.
@@ -1311,8 +1270,8 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
   // Filters
   const filteredStudents = students.filter(s => {
-    const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          s.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.email.toLowerCase().includes(searchTerm.toLowerCase());
     let matchesFilter = true;
     if (statusFilter === 'Active') matchesFilter = s.activeStatus === 'Active';
     else if (statusFilter === 'Inactive') matchesFilter = s.activeStatus === 'Inactive';
@@ -1328,11 +1287,10 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
     <div className="space-y-8 relative">
       {/* Toast Notification for Email */}
       {emailMsg.text && (
-        <div className={`fixed top-8 right-8 p-4 rounded-2xl shadow-2xl z-50 flex items-center gap-4 transition-all duration-300 ${
-          emailMsg.type === 'success' 
-            ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-100 shadow-emerald-900/20' 
-            : 'bg-rose-950/90 border border-rose-500/50 text-rose-100 shadow-rose-900/20'
-        }`}>
+        <div className={`fixed top-8 right-8 p-4 rounded-2xl shadow-2xl z-50 flex items-center gap-4 transition-all duration-300 ${emailMsg.type === 'success'
+          ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-100 shadow-emerald-900/20'
+          : 'bg-rose-950/90 border border-rose-500/50 text-rose-100 shadow-rose-900/20'
+          }`}>
           {emailMsg.type === 'success' ? <CheckCircle className="h-6 w-6 text-emerald-400" /> : <XCircle className="h-6 w-6 text-rose-400" />}
           <div>
             <p className="font-bold text-sm tracking-wide">
@@ -1360,18 +1318,26 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
           </Link>
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] uppercase font-black tracking-widest px-2.5 py-1 rounded-full"
-                style={{ color: 'var(--brand-primary)', background: 'var(--brand-gradient-soft)', border: '1px solid var(--surface-border)' }}>
-                {project?.batch}
+              <span className="text-[10px] uppercase font-black tracking-widest px-2.5 py-1 rounded-full text-purple-700 bg-purple-50 border border-purple-100">
+                {project?.batch || 'BATCH 2.0'}
               </span>
-              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full"
-                style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)' }}>
-                Active
+              <span className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full text-emerald-600 bg-emerald-50 border border-emerald-100 flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> ACTIVE
               </span>
             </div>
-            <h1 className="text-2xl font-black tracking-tight gradient-text">{project?.name || 'Loading...'}</h1>
-            <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>{project?.description || 'Cohort details, operational sheets, and placement logs'}</p>
+            <h1 className="text-2xl font-black tracking-tight text-gray-900">{project?.name || 'Kaizen 2.0'}</h1>
+            <p className="text-sm mt-0.5 text-gray-500">{project?.description || 'Project details, operational sheets, and placement logs.'}</p>
           </div>
+        </div>
+
+        {/* Top Right Action Buttons */}
+        <div className="flex items-center gap-3">
+          <button className="px-5 py-2.5 bg-white text-gray-700 font-bold text-sm rounded-xl flex items-center gap-2 transition-colors hover:bg-gray-50 border border-gray-100 shadow-sm">
+            <Filter className="h-4 w-4" /> Filter
+          </button>
+          <button className="px-5 py-2.5 bg-[#5B21B6] text-white font-bold text-sm rounded-xl flex items-center gap-2 transition-colors hover:bg-purple-800 shadow-md">
+            <Download className="h-4 w-4" /> Export Report
+          </button>
         </div>
       </div>
 
@@ -1390,73 +1356,58 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
         </div>
       )}
 
-      {/* Project Statistics Widgets */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+      {/* Project Statistics Widgets (Redesigned) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
         {[
-          { filter: 'All', label: 'Total', value: projectStats.totalStudents, icon: Users, color: '#7c3aed', tab: 'students' },
-          { filter: 'Active', label: 'Active', value: projectStats.totalActive, icon: Activity, color: '#10b981', tab: 'students' },
-          { filter: null, label: 'Attendance', value: `${projectStats.avgAttendanceRate.toFixed(0)}%`, icon: Calendar, color: '#3b82f6', tab: 'attendance' },
-          { filter: 'Placed', label: 'Placed', value: projectStats.totalHired, icon: CheckCircle, color: '#10b981', tab: 'students' },
-          { filter: 'Inactive', label: 'Inactive', value: projectStats.totalInactive, icon: XCircle, color: '#f43f5e', tab: 'students' },
-          { filter: 'Leave', label: 'Leave', value: projectStats.willinglyLeave, icon: HelpCircle, color: '#f59e0b', tab: 'students' },
-          { filter: 'At Risk', label: 'At Risk', value: projectStats.totalRisk, icon: AlertTriangle, color: '#f97316', tab: 'students' },
-        ].map(stat => {
+          { label: 'TOTAL', title: 'Enrolled', value: projectStats.totalStudents, icon: UserPlus, color: '#8b5cf6' },
+          { label: 'LIVE', title: 'Active Learners', value: projectStats.totalActive, icon: Activity, color: '#10b981' },
+          { label: 'RATE', title: 'Avg Attendance', value: `${projectStats.avgAttendanceRate.toFixed(1)}%`, icon: Calendar, color: '#f97316' },
+          { label: 'HIRED', title: 'Placed Students', value: projectStats.totalHired, icon: CheckCircle, color: '#3b82f6' },
+          { label: 'IDLE', title: 'Inactive', value: projectStats.totalInactive, icon: UserMinus, color: '#64748b' },
+          { label: 'OUT', title: 'On Leave', value: projectStats.willinglyLeave, icon: Plane, color: '#14b8a6' },
+          { label: 'RSK', title: 'At Risk', value: projectStats.totalRisk, icon: AlertTriangle, color: '#ef4444' },
+        ].map((stat, idx) => {
           const Icon = stat.icon;
-          const isActive = stat.filter ? statusFilter === stat.filter : activeTab === stat.tab;
           return (
-            <div key={stat.label}
-              onClick={() => { if (stat.filter) setStatusFilter(stat.filter); setActiveTab(stat.tab); }}
-              className="p-4 rounded-2xl text-center cursor-pointer transition-all duration-200 group"
-              style={{
-                background: isActive ? `${stat.color}12` : 'var(--surface-1)',
-                border: `1px solid ${isActive ? stat.color + '40' : 'var(--surface-border)'}`,
-              }}
-              onMouseEnter={e => { if (!isActive) { (e.currentTarget as HTMLElement).style.borderColor = stat.color + '50'; } }}
-              onMouseLeave={e => { if (!isActive) { (e.currentTarget as HTMLElement).style.borderColor = 'var(--surface-border)'; } }}
-            >
-              <div className="h-8 w-8 mx-auto rounded-xl flex items-center justify-center mb-2 text-white"
-                style={{ background: stat.color }}>
-                <Icon className="h-4 w-4" />
+            <div key={idx} className="bg-white p-5 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-gray-50 flex flex-col justify-between h-32 hover:-translate-y-1 transition-transform cursor-pointer">
+              <div className="flex justify-between items-start">
+                <Icon className="h-5 w-5" style={{ color: stat.color }} />
+                <span className="text-[9px] font-black uppercase tracking-widest text-gray-300">{stat.label}</span>
               </div>
-              <span className="text-[9px] font-black uppercase tracking-widest block" style={{ color: 'var(--text-faint)' }}>
-                {stat.label}
-              </span>
-              <p className="text-xl font-black mt-1" style={{ color: isActive ? stat.color : 'var(--foreground)' }}>
-                {stat.value}
-              </p>
+              <div className="mt-4">
+                <p className="text-2xl font-black text-gray-900">{stat.value}</p>
+                <p className="text-[10px] font-bold text-gray-500 mt-0.5">{stat.title}</p>
+              </div>
             </div>
           );
         })}
       </div>
 
       {/* Main Command Tabs Switcher */}
-      <div className="flex gap-1 overflow-x-auto p-1 rounded-2xl" style={{ background: 'var(--surface-2)', border: '1px solid var(--surface-border)' }}>
+      <div className="flex bg-gray-100 p-1 rounded-full w-fit gap-1 border border-gray-200/50 overflow-x-auto max-w-full">
         {[
-          { key: 'overview', label: 'Overview', emoji: '📊' },
-          { key: 'students', label: 'Students', emoji: '👥' },
-          { key: 'attendance', label: 'Attendance', emoji: '✅' },
-          { key: 'tasks', label: 'Tasks', emoji: '📋' },
-          { key: 'points', label: 'Leaderboard', emoji: '🏆' },
+          { key: 'overview', label: 'Overview' },
+          { key: 'students', label: 'Students' },
+          { key: 'attendance', label: 'Attendance' },
+          { key: 'tasks', label: 'Tasks' },
+          { key: 'points', label: 'Leaderboard' },
         ].map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-all duration-200 cursor-pointer"
-            style={{
-              background: activeTab === tab.key ? 'var(--brand-gradient-soft)' : 'transparent',
-              color: activeTab === tab.key ? 'var(--brand-primary)' : 'var(--text-muted)',
-              border: activeTab === tab.key ? '1px solid var(--surface-border-hover)' : '1px solid transparent',
-            }}
+            className={`px-5 py-2 text-xs font-black uppercase tracking-wider rounded-full transition-all duration-200 cursor-pointer shrink-0 ${activeTab === tab.key
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'text-gray-500 hover:text-gray-800'
+              }`}
           >
-            <span className="text-sm">{tab.emoji}</span>
-            <span className="hidden sm:inline uppercase tracking-wider">{tab.label}</span>
+            <span>{tab.label}</span>
           </button>
         ))}
       </div>
 
       {/* Unified Tab Area */}
-      <div className="glass-card p-6 min-h-[400px]">
-        
+      <div className="min-h-[400px] py-4 space-y-6">
+
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
@@ -1482,58 +1433,158 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               </div>
             )}
 
-            <div>
-              <h3 className="text-sm font-bold text-slate-200">Batch Performance Analysis</h3>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Overview metrics and training status summaries for {project?.name}.
-              </p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+              {/* Curriculum Completion Chart */}
+              <div className="lg:col-span-2 bg-white border border-gray-100 p-8 rounded-[32px] shadow-sm flex flex-col relative overflow-hidden">
+                <div className="flex justify-between items-center mb-8 relative z-10">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+                      <LayoutDashboard className="h-5 w-5" />
+                    </div>
+                    <h3 className="text-base font-bold text-gray-500">Curriculum Completion</h3>
+                  </div>
+                  <div className="flex bg-gray-100 rounded-xl p-1">
+                    <button className="px-4 py-1.5 rounded-lg bg-white shadow-sm text-xs font-bold text-gray-800">Daily</button>
+                    <button className="px-4 py-1.5 rounded-lg text-xs font-bold text-gray-500 hover:text-gray-800 transition-colors">Weekly</button>
+                  </div>
+                </div>
+
+                <div className="flex-1 flex items-end justify-between gap-4 mt-auto pt-10 h-64 relative z-10">
+                  {[
+                    { day: 'Mon', h: '30%', active: false },
+                    { day: 'Tue', h: '45%', active: false },
+                    { day: 'Wed', h: '85%', active: true },
+                    { day: 'Thu', h: '50%', active: false },
+                    { day: 'Fri', h: '70%', active: false },
+                    { day: 'Sat', h: '25%', active: false },
+                    { day: 'Sun', h: '20%', active: false }
+                  ].map(d => (
+                    <div key={d.day} className="flex flex-col items-center gap-4 flex-1 h-full justify-end group">
+                      <div className="w-full max-w-[60px] h-full relative flex items-end">
+                        <div className={`absolute bottom-0 w-full rounded-full transition-all duration-300 ${d.active ? 'bg-[#8b5cf6] shadow-lg shadow-purple-500/30' : 'bg-[#bfdbfe] opacity-80 group-hover:opacity-100'}`} style={{ height: d.h }}></div>
+                        <div className={`absolute bottom-0 w-full rounded-full bg-slate-100 -z-10`} style={{ height: '100%' }}></div>
+                      </div>
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${d.active ? 'text-[#8b5cf6]' : 'text-gray-400'}`}>{d.day}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Placement Predictions */}
+              <div className="lg:col-span-1 bg-white border border-[#d946ef]/40 rounded-[32px] p-8 shadow-[0_8px_30px_rgba(217,70,239,0.06)] flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-6">
+                    <div className="h-8 w-8 rounded-full border border-purple-200 flex items-center justify-center">
+                      <div className="h-3 w-3 rounded-full border-2 border-purple-500"></div>
+                    </div>
+                    <h3 className="text-[13px] font-black uppercase tracking-widest text-gray-500">AI PLACEMENT PREDICTIONS</h3>
+                  </div>
+                  <p className="text-[14px] font-semibold text-gray-600 leading-relaxed mb-8">
+                    Cohort Kaizen 2.0 shows a <span className="text-[#8b5cf6] font-black">15% higher</span> readiness score compared to previous benchmarks. Data suggests accelerated hiring potential in full-stack engineering roles.
+                  </p>
+
+                  <div className="space-y-4">
+                    <div className="border border-gray-100 p-4 rounded-2xl flex items-center justify-between group hover:border-purple-200 transition-colors cursor-pointer">
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                          <Target className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-0.5 mb-1">High Match</p>
+                          <h4 className="text-sm font-black text-gray-900">12 Students</h4>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-purple-500 transition-colors" />
+                    </div>
+
+                    <div className="border border-gray-100 p-4 rounded-2xl flex items-center justify-between group hover:border-purple-200 transition-colors cursor-pointer">
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-fuchsia-50 text-fuchsia-600 flex items-center justify-center shrink-0">
+                          <ClipboardList className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-0.5 mb-1">Avg. Mock Score</p>
+                          <h4 className="text-sm font-black text-gray-900">8.4 <span className="text-gray-400 text-xs font-bold">/ 10</span></h4>
+                        </div>
+                      </div>
+                      <TrendingUp className="h-4 w-4 text-fuchsia-400" />
+                    </div>
+                  </div>
+                </div>
+
+                <button className="w-full mt-8 bg-[#1f2937] hover:bg-[#111827] text-white font-bold py-4 rounded-2xl text-[13px] transition-colors shadow-lg shadow-gray-900/10 flex items-center justify-center gap-2">
+                  View Talent Matcher <ExternalLink className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Placement rate progress */}
-              <div className="bg-slate-950/40 border border-slate-850 p-6 rounded-2xl space-y-4">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Placement Progress</span>
-                <div className="flex items-center justify-between">
-                  <div className="h-16 w-16 rounded-full border-4 border-indigo-500/25 flex items-center justify-center font-bold text-slate-200 text-lg">
-                    {projectStats.totalStudents > 0 
-                      ? ((projectStats.totalHired / projectStats.totalStudents) * 100).toFixed(0) 
-                      : '0'}%
+
+            {/* Bottom Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+
+              {/* Recent Student Activity */}
+              <div className="lg:col-span-2 bg-white border border-gray-100 p-8 rounded-[32px] shadow-sm flex flex-col">
+                <div className="flex justify-between items-center mb-8">
+                  <h3 className="text-base font-bold text-gray-800">Recent Student Activity</h3>
+                  <button className="text-[11px] font-black uppercase tracking-widest text-purple-600 hover:text-purple-700">View All Students</button>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between pb-6 border-b border-gray-50">
+                    <div className="flex items-center gap-4">
+                      <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Arjun" className="h-12 w-12 rounded-full border border-gray-100 bg-gray-50" />
+                      <div>
+                        <h4 className="text-sm font-black text-gray-900">Arjun Mehta</h4>
+                        <p className="text-[11px] text-gray-500 font-medium mt-0.5">Advanced Javascript Module Completed</p>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 px-3 py-1 bg-emerald-50 rounded-full border border-emerald-100">94% SCORE</span>
                   </div>
-                  <div className="text-xs text-slate-450 space-y-1">
-                    <p>Total Hired: <span className="font-bold text-slate-100">{projectStats.totalHired}</span></p>
-                    <p>Remaining: <span className="font-bold text-slate-100">{projectStats.totalStudents - projectStats.totalHired}</span></p>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah" className="h-12 w-12 rounded-full border border-gray-100 bg-gray-50" />
+                      <div>
+                        <h4 className="text-sm font-black text-gray-900">Sarah Jenkins</h4>
+                        <p className="text-[11px] text-gray-500 font-medium mt-0.5">System Design Mock Interview</p>
+                      </div>
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-purple-600 px-3 py-1 bg-purple-50 rounded-full border border-purple-100">COMPLETED</span>
                   </div>
                 </div>
               </div>
 
-              {/* Attendance metrics */}
-              <div className="bg-slate-950/40 border border-slate-850 p-6 rounded-2xl space-y-4">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Avg. Attendance Rate</span>
-                <div className="flex items-center justify-between">
-                  <div className="h-16 w-16 rounded-full border-4 border-emerald-500/25 flex items-center justify-center font-bold text-slate-200 text-lg">
-                    {projectStats.avgAttendanceRate.toFixed(0)}%
+              {/* Placement Pipeline */}
+              <div className="lg:col-span-1 bg-white border border-gray-100 p-8 rounded-[32px] shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-base font-bold text-gray-800">Placement Pipeline</h3>
+                    <Rocket className="h-5 w-5 text-purple-500" />
                   </div>
-                  <div className="text-xs text-slate-450 space-y-1">
-                    <p>Cohort Standard: <span className="text-emerald-400 font-bold">&gt; 60%</span></p>
-                    <p>Overall engagement is stable.</p>
-                  </div>
-                </div>
-              </div>
 
-              {/* Status breakdown */}
-              <div className="bg-slate-950/40 border border-slate-850 p-6 rounded-2xl space-y-4">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Cohort Activity Ratio</span>
-                <div className="flex items-center justify-between">
-                  <div className="h-16 w-16 rounded-full border-4 border-slate-800 flex items-center justify-center font-bold text-slate-200 text-lg">
-                    {projectStats.totalStudents > 0
-                      ? ((projectStats.totalActive / projectStats.totalStudents) * 100).toFixed(0)
-                      : '0'}%
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full mb-8">
+                    <div className="h-full bg-purple-500 rounded-full w-1/3"></div>
                   </div>
-                  <div className="text-xs text-slate-450 space-y-1">
-                    <p>Active Students: <span className="font-bold text-slate-100">{projectStats.totalActive}</span></p>
-                    <p>Inactive: <span className="font-bold text-slate-100">{projectStats.totalInactive}</span></p>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-bold text-gray-600">Screening Stage</span>
+                      <span className="font-black text-gray-900">18 Students</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-bold text-gray-600">Technical Rounds</span>
+                      <span className="font-black text-gray-900">7 Students</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-bold text-gray-600">Final HR</span>
+                      <span className="font-black text-gray-900">4 Students</span>
+                    </div>
                   </div>
                 </div>
+
+                <button className="w-full mt-8 border-2 border-purple-100 text-purple-600 hover:bg-purple-50 font-bold py-3.5 rounded-2xl text-[11px] uppercase tracking-widest transition-colors">
+                  Manage Pipeline
+                </button>
               </div>
             </div>
           </div>
@@ -1544,51 +1595,51 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h3 className="text-sm font-bold text-slate-200">
-                  Cohort Enrolled Students
+                <h3 className="text-sm font-bold text-gray-900">
+                  Project Enrolled Students
                   {statusFilter !== 'All' && (
-                    <span className="ml-3 text-[10px] bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded-md uppercase tracking-wider">
+                    <span className="ml-3 text-[10px] bg-purple-50 text-purple-600 border border-purple-100 px-2 py-1 rounded-md uppercase tracking-wider">
                       Filter: {statusFilter}
                     </span>
                   )}
                 </h3>
-                <p className="text-xs text-slate-500 mt-1">Review profiles, grades, streaks and placement status.</p>
+                <p className="text-xs text-gray-500 mt-1">Review profiles, grades, streaks and placement status.</p>
               </div>
 
               <div className="flex items-center gap-3 flex-wrap">
                 {userRole === 'mentor' && (
                   <>
                     {!formConfig ? (
-                  <button
-                    onClick={handleCreateForm}
-                    disabled={formSaving}
-                    className="bg-indigo-600/90 hover:bg-indigo-600 text-white font-bold text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all disabled:opacity-50"
-                  >
-                    {formSaving ? 'Initializing...' : 'Create Student Info Form'}
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => { setCustomFields(formConfig.fields || []); setShowFormBuilderModal(true); }}
-                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-750 font-bold text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all"
-                    >
-                      Configure Form
-                    </button>
-                    <button
-                      onClick={handleCopyFormLink}
-                      className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all"
-                    >
-                      {copiedLink ? 'Copied!' : 'Copy Form Link'}
-                    </button>
-                    <button
-                      onClick={() => { setImportDetailsMsg({ type: '', text: '' }); setShowImportDetailsModal(true); }}
-                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-750 font-bold text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all"
-                    >
-                      Import Details
-                    </button>
+                      <button
+                        onClick={handleCreateForm}
+                        disabled={formSaving}
+                        className="bg-indigo-600/90 hover:bg-indigo-600 text-white font-bold text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all disabled:opacity-50"
+                      >
+                        {formSaving ? 'Initializing...' : 'Create Student Info Form'}
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => { setCustomFields(formConfig.fields || []); setShowFormBuilderModal(true); }}
+                          className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 font-bold text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all shadow-sm"
+                        >
+                          Configure Form
+                        </button>
+                        <button
+                          onClick={handleCopyFormLink}
+                          className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all"
+                        >
+                          {copiedLink ? 'Copied!' : 'Copy Form Link'}
+                        </button>
+                        <button
+                          onClick={() => { setImportDetailsMsg({ type: '', text: '' }); setShowImportDetailsModal(true); }}
+                          className="bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 font-bold text-[10px] uppercase tracking-wider px-4 py-2.5 rounded-xl transition-all shadow-sm"
+                        >
+                          Import Details
+                        </button>
+                      </>
+                    )}
                   </>
-                )}
-                </>
                 )}
 
                 <button
@@ -1599,9 +1650,9 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                 </button>
 
                 {statusFilter !== 'All' && (
-                  <button 
+                  <button
                     onClick={() => setStatusFilter('All')}
-                    className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hover:text-white transition-colors"
+                    className="text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:text-gray-900 transition-colors"
                   >
                     Clear Filter
                   </button>
@@ -1610,7 +1661,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="text-xs font-semibold bg-slate-900 border border-slate-700 text-slate-300 rounded-xl px-3 py-2.5 outline-none focus:border-indigo-500 cursor-pointer"
+                  className="text-xs font-semibold bg-white border border-gray-200 text-gray-700 rounded-xl px-3 py-2.5 outline-none focus:border-purple-400 cursor-pointer shadow-sm"
                 >
                   <option value="All">All Students</option>
                   <option value="Active">Active</option>
@@ -1621,22 +1672,22 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                 </select>
                 {/* Search box */}
                 <div className="relative w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                   <input
                     type="text"
                     placeholder="Search students..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full text-xs bg-slate-950/60 border border-slate-850 focus:border-indigo-650 text-slate-200 pl-9 pr-4 py-2.5 rounded-xl outline-none placeholder:text-slate-650"
+                    className="w-full text-xs bg-white border border-gray-200 focus:border-purple-400 text-gray-900 pl-9 pr-4 py-2.5 rounded-xl outline-none placeholder:text-gray-400 shadow-sm"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="overflow-x-auto border border-slate-850 rounded-2xl bg-slate-950/20">
+            <div className="overflow-x-auto border border-gray-100 rounded-2xl bg-white shadow-sm">
               {selectedStudentIds.length > 0 && (
-                <div className="bg-slate-900 border-b border-slate-850 p-3 flex items-center justify-between sticky left-0 z-10">
-                  <span className="text-xs font-bold text-indigo-400">
+                <div className="bg-purple-50 border-b border-purple-100 p-3 flex items-center justify-between sticky left-0 z-10">
+                  <span className="text-xs font-bold text-purple-700">
                     {selectedStudentIds.length} student(s) selected
                   </span>
                   <button
@@ -1653,13 +1704,14 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                   </button>
                 </div>
               )}
-              <table className="w-full text-left border-collapse min-w-[900px]">
-                <thead>
-                  <tr className="bg-slate-900/60 border-b border-slate-850">
-                    <th className="p-4 w-12 text-center">
-                      <input 
-                        type="checkbox" 
-                        className="rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer"
+              <table className="w-full text-left border-collapse min-w-[1200px] bg-white/40 backdrop-blur-md rounded-3xl overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative">
+                <thead className="bg-white/50 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/50 backdrop-blur-sm">
+                  <tr>
+                    <th className="w-1 p-0"></th>
+                    <th className="px-6 py-5 w-12 text-center rounded-tl-xl">
+                      <input
+                        type="checkbox"
+                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 focus:ring-offset-white cursor-pointer"
                         checked={filteredStudents.length > 0 && selectedStudentIds.length === filteredStudents.length}
                         onChange={(e) => {
                           if (e.target.checked) {
@@ -1670,129 +1722,159 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                         }}
                       />
                     </th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500">Student Info</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500">Tier Status</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500">Attendance / Task Marks</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500">streaks</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500">Risk Status</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500">Hired Status</th>
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-right">Actions</th>
+                    <th className="px-6 py-5">Profile</th>
+                    <th className="px-6 py-5">Tier</th>
+                    <th className="px-6 py-5">Risk</th>
+                    <th className="px-6 py-5 text-center">Attendance</th>
+                    <th className="px-6 py-5 text-center">Streak</th>
+                    <th className="px-6 py-5 text-center">Points</th>
+                    <th className="px-6 py-5">Placement Status</th>
+                    <th className="px-6 py-5 text-right rounded-tr-xl">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-850/60">
-                  {filteredStudents.map((student) => (
-                    <tr key={student._id} className={`hover:bg-slate-900/10 transition-all ${selectedStudentIds.includes(student._id) ? 'bg-indigo-500/5' : ''}`}>
-                      <td className="p-4 text-center">
-                        <input 
-                          type="checkbox" 
-                          className="rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer"
-                          checked={selectedStudentIds.includes(student._id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedStudentIds(prev => [...prev, student._id]);
-                            } else {
-                              setSelectedStudentIds(prev => prev.filter(id => id !== student._id));
-                            }
-                          }}
-                        />
-                      </td>
-                      <td className="p-4 flex items-center gap-3">
-                        <div className="h-9 w-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-slate-300 text-xs">
-                          {student.name.charAt(0)}
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-slate-200 text-xs">{student.name}</h4>
-                          <span className="text-[10px] text-slate-500 block mt-0.5">{student.email}</span>
-                        </div>
-                      </td>
+                <tbody className="divide-y divide-white/40 font-medium text-xs text-gray-700">
+                  {filteredStudents.map((student, idx) => {
+                    const isSelected = selectedStudentIds.includes(student._id);
+                    const isAtRisk = student.riskStatus === 'High';
+                    const attRate = Math.round((student.totalAttendance / (student.totalAttendance + student.totalAbsent || 1)) * 100) || 95;
+                    const streakCount = student.attendanceStreak > 0 ? student.attendanceStreak : student.absentStreak || 0;
+                    const streakIcon = student.attendanceStreak > 0 ? '🔥' : '⚠️';
 
-                      <td className="p-4">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider border px-2.5 py-0.5 rounded-full ${
-                          student.tier === 'Tier A' 
-                            ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' 
-                            : student.tier === 'Tier B' 
-                            ? 'bg-slate-400/10 border-slate-400/20 text-slate-350'
-                            : 'bg-orange-800/10 border-orange-800/20 text-orange-450'
-                        }`}>
-                          {student.tier}
-                        </span>
-                      </td>
+                    return (
+                      <tr
+                        key={student._id}
+                        className={`transition-all duration-300 hover:bg-white/70 relative ${isSelected ? 'bg-purple-50/40' : 'bg-transparent'
+                          }`}
+                      >
+                        {/* Selected Indicator left border bar */}
+                        <td className="w-1 p-0 relative">
+                          {isAtRisk && (
+                            <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-rose-500" />
+                          )}
+                        </td>
 
-                      <td className="p-4">
-                        <div>
-                          <span className="text-xs font-bold text-slate-200">{student.totalMark} pts</span>
-                          <span className="text-[10px] text-slate-500 block mt-0.5">Att: {student.totalAttendanceMark} | Task: {student.totalTaskMark}</span>
-                        </div>
-                      </td>
+                        <td className="px-6 py-4 text-center">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 focus:ring-offset-white cursor-pointer"
+                            checked={isSelected}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedStudentIds(prev => [...prev, student._id]);
+                              } else {
+                                setSelectedStudentIds(prev => prev.filter(id => id !== student._id));
+                              }
+                            }}
+                          />
+                        </td>
 
-                      <td className="p-4 text-xs">
-                        {student.attendanceStreak > 0 ? (
-                          <span className="text-emerald-400 font-semibold">🔥 {student.attendanceStreak} days</span>
-                        ) : student.absentStreak > 0 ? (
-                          <span className="text-rose-450 font-semibold">⚠️ {student.absentStreak} days</span>
-                        ) : (
-                          <span className="text-slate-600">-</span>
-                        )}
-                      </td>
+                        <td className="px-6 py-4 flex items-center gap-3">
+                          <div className={`p-0.5 rounded-full border-2 ${isAtRisk ? 'border-rose-200' : 'border-purple-100'} flex shrink-0`}>
+                            <img
+                              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.name}`}
+                              alt="Avatar"
+                              className="h-10 w-10 rounded-full"
+                            />
+                          </div>
+                          <div>
+                            <h4 className={`text-xs font-extrabold ${isAtRisk ? 'text-rose-600' : 'text-gray-900'}`}>{student.name}</h4>
+                            <span className="text-[10px] text-gray-500 block mt-0.5 font-semibold">{student.email}</span>
+                          </div>
+                        </td>
 
-                      <td className="p-4">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                          student.riskStatus === 'High' 
-                            ? 'bg-rose-500/10 text-rose-400'
-                            : student.riskStatus === 'Low'
-                            ? 'bg-slate-800 text-slate-400'
-                            : 'bg-emerald-500/10 text-emerald-400'
-                        }`}>
-                          {student.riskStatus}
-                        </span>
-                      </td>
+                        <td className="px-6 py-4">
+                          <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-sm inline-block ${student.tier === 'Tier A'
+                            ? 'bg-emerald-50/80 border border-emerald-100/50 text-emerald-700'
+                            : student.tier === 'Tier B'
+                              ? 'bg-amber-50/80 border border-amber-100/50 text-amber-700'
+                              : 'bg-slate-100/80 border border-slate-200/50 text-slate-600'
+                            }`}>
+                            {student.tier || 'Tier C'}
+                          </span>
+                        </td>
 
-                      <td className="p-4">
-                        <select
-                          value={student.hiredStatus}
-                          onChange={(e) => handleHiredStatusChange(student._id, e.target.value)}
-                          className="bg-slate-950 text-xs border border-slate-800 text-slate-300 rounded-xl px-3 py-1.5 outline-none"
-                        >
-                          <option value="Looking">Looking</option>
-                          <option value="In Job task">In Job task</option>
-                          <option value="In interview">In interview</option>
-                          <option value="On Process">On Process</option>
-                          <option value="Hired">Hired</option>
-                        </select>
-                      </td>
+                        <td className="px-6 py-4">
+                          <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-sm inline-block ${isAtRisk
+                            ? 'bg-rose-50/80 border border-rose-100/50 text-rose-600'
+                            : 'bg-emerald-50/80 border border-emerald-100/50 text-emerald-700'
+                            }`}>
+                            {isAtRisk ? 'At Risk' : 'Low Risk'}
+                          </span>
+                        </td>
 
-                      <td className="p-4 text-right flex items-center justify-end gap-2">
-                        {student.riskStatus === 'High' && (
-                          <button
-                            onClick={() => handleSendAIEmail(student._id)}
-                            disabled={sendingEmailId === student._id}
-                            className="p-2 hover:bg-rose-500/20 rounded-xl text-rose-450 transition-colors inline-flex items-center gap-1.5 text-[10px] font-bold uppercase disabled:opacity-50"
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-purple-700 font-extrabold bg-purple-50 border border-purple-100/50 shadow-sm px-3 py-1.5 rounded-lg text-[11px]">
+                            {attRate}%
+                          </span>
+                        </td>
+
+                        <td className="px-6 py-4 text-center">
+                          <span className={`font-extrabold px-3 py-1.5 rounded-lg border shadow-sm text-[11px] inline-flex items-center gap-1 ${student.attendanceStreak > 0 ? 'bg-orange-50 text-orange-600 border-orange-100/50' : 'bg-rose-50 text-rose-600 border-rose-100/50'}`}>
+                            {streakCount} {streakIcon}
+                          </span>
+                        </td>
+
+                        <td className="px-6 py-4 text-center">
+                          <span className="text-gray-900 font-extrabold bg-white border border-gray-200 shadow-sm px-3 py-1.5 rounded-lg text-[11px]">
+                            {student.totalMark || 0}
+                          </span>
+                        </td>
+
+                        <td className="px-6 py-4">
+                          <select
+                            value={student.hiredStatus}
+                            onChange={(e) => handleHiredStatusChange(student._id, e.target.value)}
+                            className={`text-[9px] font-black uppercase tracking-widest shadow-sm rounded-xl px-4 py-2.5 outline-none cursor-pointer appearance-none text-center transition-colors border ${student.hiredStatus === 'Hired'
+                              ? 'bg-emerald-50/80 border-emerald-100/50 text-emerald-700 hover:bg-emerald-100'
+                              : student.hiredStatus === 'Looking'
+                                ? 'bg-purple-50/80 border-purple-100/50 text-purple-700 hover:bg-purple-100'
+                                : 'bg-amber-50/80 border-amber-100/50 text-amber-700 hover:bg-amber-100'
+                              }`}
+                            style={{ textAlignLast: 'center' }}
                           >
-                            {sendingEmailId === student._id ? (
-                              <div className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                            ) : (
-                              <Send className="h-3.5 w-3.5" />
+                            <option value="Looking">Looking</option>
+                            <option value="In Job task">In Job task</option>
+                            <option value="In interview">In interview</option>
+                            <option value="On Process">On Process</option>
+                            <option value="Hired">Hired</option>
+                          </select>
+                        </td>
+
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {isAtRisk && (
+                              <button
+                                onClick={() => handleSendAIEmail(student._id)}
+                                disabled={sendingEmailId === student._id}
+                                className="bg-rose-50 hover:bg-rose-100 text-rose-600 p-2 rounded-xl border border-rose-100/50 transition-colors inline-flex items-center justify-center disabled:opacity-50 cursor-pointer shadow-sm group"
+                                title="Send AI Alert"
+                              >
+                                {sendingEmailId === student._id ? (
+                                  <div className="h-4 w-4 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+                                ) : (
+                                  <Send className="h-4 w-4 group-hover:animate-pulse" />
+                                )}
+                              </button>
                             )}
-                            <span>AI Alert</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => { setEditStudentData(student); setShowEditStudentModal(true); }}
-                          className="p-2 hover:bg-slate-800 rounded-xl text-emerald-400 hover:text-emerald-300 transition-colors inline-flex items-center gap-1.5 text-xs font-semibold"
-                        >
-                          <Edit3 className="h-4 w-4" />
-                          <span>Edit</span>
-                        </button>
-                        <button
-                          onClick={() => { setSelectedStudent(student); setShowDrawer(true); }}
-                          className="p-2 hover:bg-slate-800 rounded-xl text-indigo-400 hover:text-indigo-300 transition-colors inline-flex items-center gap-1.5 text-xs font-semibold"
-                        >
-                          <Eye className="h-4 w-4" />
-                          <span>See Profile</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                            <button
+                              onClick={() => { setEditStudentData(student); setShowEditStudentModal(true); }}
+                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 p-2 rounded-xl border border-emerald-100/50 transition-colors inline-flex items-center justify-center cursor-pointer shadow-sm"
+                              title="Edit"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => { setSelectedStudent(student); setShowDrawer(true); }}
+                              className="bg-purple-50 hover:bg-purple-100 text-purple-700 p-2 rounded-xl border border-purple-100/50 transition-colors inline-flex items-center justify-center cursor-pointer shadow-sm"
+                              title="See Profile"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1844,11 +1926,10 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                     return (
                       <div
                         key={form._id}
-                        className={`border rounded-2xl p-4 transition-all ${
-                          status === 'active'
-                            ? 'bg-emerald-500/5 border-emerald-500/15 hover:border-emerald-500/25'
-                            : 'bg-slate-950/30 border-slate-850'
-                        }`}
+                        className={`border rounded-2xl p-4 transition-all ${status === 'active'
+                          ? 'bg-emerald-500/5 border-emerald-500/15 hover:border-emerald-500/25'
+                          : 'bg-slate-950/30 border-slate-850'
+                          }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="space-y-1.5 flex-1 min-w-0">
@@ -1911,61 +1992,85 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               </div>
             </div>
 
-            
             {/* ── Manual Attendance Matrix (Spreadsheet view) ────────────────── */}
             <div className="mt-8 space-y-4">
-              <div>
-                <h3 className="text-sm font-bold text-slate-200">Manual Attendance Matrix</h3>
-                <p className="text-xs text-slate-500 mt-1">Select dropdown to manually toggle attendance status. Syncs scores instantly.</p>
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <h3 className="text-base font-extrabold text-gray-900">Manual Attendance Matrix</h3>
+                  <p className="text-xs text-gray-500 mt-1">Select dropdown to manually toggle attendance status. Syncs scores instantly.</p>
+                </div>
+
+                {/* Scroll horizontally to see all dates */}
               </div>
 
-              <div className="w-full max-w-full overflow-x-auto border border-slate-850 rounded-2xl bg-slate-950/20 relative">
+              <div className="w-full max-w-full overflow-x-auto border border-gray-100 rounded-3xl bg-white shadow-sm relative">
                 <table className="w-full text-left border-collapse min-w-[1000px]">
                   <thead>
-                    <tr className="bg-slate-900/60 border-b border-slate-850">
+                    <tr className="bg-gray-50 border-b border-gray-100">
                       {/* Pinned left columns */}
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 sticky left-0 bg-slate-900/90 z-20 w-44 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)]">Name</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 sticky left-[11rem] bg-slate-900/90 z-20 w-48 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)]">Email</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 sticky left-[23rem] bg-slate-900/90 z-20 w-24 border-r border-slate-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)]">Tier</th>
-                      
+                      <th className="p-4 text-xs font-extrabold uppercase tracking-widest text-gray-500 sticky left-0 bg-gray-50 z-20 w-52 border-r border-gray-100/50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)]">Student Info</th>
+                      <th className="p-4 text-xs font-extrabold uppercase tracking-widest text-gray-500 sticky left-[13rem] bg-gray-50 z-20 w-32 border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)]">Tier & Risk</th>
+
                       {/* Summary Columns */}
-                      {/* Summary Columns */}
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center w-24 bg-rose-500/5">Total Absent Days</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center w-24 bg-emerald-500/5">Total Present Days</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center w-24 bg-indigo-500/5">Attendance Points</th>
-                      <th className="p-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center w-24 bg-purple-500/5 border-r border-slate-850">Absent Streak</th>
-                      
+                      <th className="p-4 text-[11px] font-extrabold uppercase tracking-widest text-gray-500 text-center w-28 bg-rose-50/30 border-r border-rose-100/30">Absent Days</th>
+                      <th className="p-4 text-[11px] font-extrabold uppercase tracking-widest text-gray-500 text-center w-28 bg-rose-50/30 border-r border-rose-100/30">Absent Streak</th>
+                      <th className="p-4 text-[11px] font-extrabold uppercase tracking-widest text-gray-500 text-center w-28 bg-emerald-50/30 border-r border-emerald-100/30">Present Days</th>
+                      <th className="p-4 text-[11px] font-extrabold uppercase tracking-widest text-gray-500 text-center w-28 bg-emerald-50/30 border-r border-emerald-100/30">Present Streak</th>
+                      <th className="p-4 text-[11px] font-extrabold uppercase tracking-widest text-gray-500 text-center w-28 bg-blue-50/30 border-r border-gray-100">Att. Points</th>
+
                       {/* Dynamic Date Columns */}
                       {dates.map(date => {
                         const parts = date.split('-');
                         return (
-                          <th key={date} className="p-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 min-w-[120px]">
+                          <th key={date} className="p-4 text-center text-[11px] font-extrabold uppercase tracking-widest text-gray-500 min-w-[125px]">
                             {parts[2]}/{parts[1]}/{parts[0]}
                           </th>
                         );
                       })}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-850/60">
+                  <tbody className="divide-y divide-gray-100 font-semibold text-xs text-gray-700">
                     {filteredStudents.map(student => (
-                      <tr key={student._id} className="hover:bg-slate-900/20 group">
+                      <tr key={student._id} className="hover:bg-gray-50/50 group transition-colors">
                         {/* Pinned left columns */}
-                        <td className="p-3 text-[11px] font-semibold text-slate-200 sticky left-0 bg-slate-950 z-10 w-44 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)] truncate group-hover:bg-slate-900/90 transition-colors">
-                          {student.name}
+                        <td className="p-4 font-bold text-gray-900 sticky left-0 bg-white z-10 w-52 border-r border-gray-100/50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)] truncate transition-colors">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.name}`}
+                              alt="Avatar"
+                              className="h-9 w-9 rounded-full border border-purple-500/20 shadow-sm"
+                            />
+                            <div className="min-w-0">
+                              <h4 className="font-extrabold text-gray-900 text-[13px] truncate">{student.name}</h4>
+                              <span className="text-[11px] text-gray-500 block mt-0.5 font-semibold truncate">{student.email}</span>
+                            </div>
+                          </div>
                         </td>
-                        <td className="p-3 text-[10px] text-slate-400 sticky left-[11rem] bg-slate-950 z-10 w-48 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)] truncate group-hover:bg-slate-900/90 transition-colors">
-                          {student.email}
-                        </td>
-                        <td className="p-3 text-[10px] text-slate-300 sticky left-[23rem] bg-slate-950 z-10 w-24 border-r border-slate-800 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.3)] group-hover:bg-slate-900/90 transition-colors">
-                          <span className="bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded border border-indigo-500/20 w-full inline-block text-center">{student.tier || '-'}</span>
+                        <td className="p-4 sticky left-[13rem] bg-white z-10 w-32 border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)] transition-colors">
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-widest ${student.tier === 'Tier A'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                              : student.tier === 'Tier B'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                                : 'bg-gray-100 text-gray-650 border border-gray-200'
+                              }`}>
+                              {student.tier || 'Tier C'}
+                            </span>
+                            <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-widest ${student.riskStatus === 'High'
+                              ? 'bg-rose-50 text-rose-750 border border-rose-100'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                              }`}>
+                              {student.riskStatus === 'High' ? 'At Risk' : 'Low Risk'}
+                            </span>
+                          </div>
                         </td>
 
                         {/* Summary Columns */}
-                        {/* Summary Columns */}
-                        <td className="p-3 text-[11px] font-bold text-rose-400 text-center bg-rose-500/5">{student.totalAbsent}</td>
-                        <td className="p-3 text-[11px] font-bold text-emerald-400 text-center bg-emerald-500/5">{student.totalAttendance}</td>
-                        <td className="p-3 text-[11px] font-bold text-indigo-400 text-center bg-indigo-500/5">{student.totalAttendanceMark}</td>
-                        <td className="p-3 text-[11px] font-bold text-purple-400 text-center bg-purple-500/5 border-r border-slate-850">{student.absentStreak}</td>
+                        <td className="p-4 text-rose-600 text-sm font-black text-center bg-rose-50/10 border-r border-rose-100/30">{student.totalAbsent || 0}</td>
+                        <td className="p-4 text-rose-600 text-sm font-black text-center bg-rose-50/10 border-r border-rose-100/30">{student.absentStreak || 0}</td>
+                        <td className="p-4 text-emerald-600 text-sm font-black text-center bg-emerald-50/10 border-r border-emerald-100/30">{student.totalAttendance || 0}</td>
+                        <td className="p-4 text-emerald-600 text-sm font-black text-center bg-emerald-50/10 border-r border-emerald-100/30">{student.attendanceStreak || 0}</td>
+                        <td className="p-4 text-blue-600 text-sm font-black text-center bg-blue-50/10 border-r border-gray-100">{student.totalAttendanceMark || 0}</td>
 
                         {/* Dynamic Date Cells */}
                         {dates.map(date => {
@@ -1974,23 +2079,22 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                           const isSaving = matrixSavingState[cellId];
 
                           return (
-                            <td key={date} className="p-2 text-center">
+                            <td key={date} className="p-3 text-center">
                               <select
                                 value={status}
                                 onChange={(e) => handleSetAttendanceStatus(student._id, date, e.target.value)}
                                 disabled={isSaving}
-                                className={`h-8 w-full min-w-[110px] rounded-lg text-[10px] font-bold uppercase tracking-wider px-2 cursor-pointer outline-none transition-all border ${
-                                  status === 'Present'
-                                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
-                                    : status === 'Absent'
-                                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
-                                    : 'bg-orange-500/10 border-orange-500/30 text-orange-400 hover:bg-orange-500/20'
-                                } disabled:opacity-40 appearance-none text-center`}
+                                className={`h-9 w-full min-w-[115px] rounded-xl text-[10px] font-black uppercase tracking-widest px-2 cursor-pointer outline-none transition-all border shadow-sm ${status === 'Present'
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                                  : status === 'Absent'
+                                    ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                                    : 'bg-orange-50 border-orange-200 text-orange-700 hover:bg-orange-100'
+                                  } disabled:opacity-40 appearance-none text-center`}
                                 style={{ textAlignLast: 'center' }}
                               >
-                                <option value="Present" className="bg-slate-900 text-emerald-400">Present (+)</option>
-                                <option value="Absent" className="bg-slate-900 text-rose-400">Absent (−)</option>
-                                <option value="Leave" className="bg-slate-900 text-orange-400">Informed</option>
+                                <option value="Present" className="text-emerald-700 font-bold bg-white">Present (+)</option>
+                                <option value="Absent" className="text-rose-700 font-bold bg-white">Absent (−)</option>
+                                <option value="Leave" className="text-orange-700 font-bold bg-white">Informed</option>
                               </select>
                             </td>
                           );
@@ -2007,20 +2111,20 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
         {/* Create Attendance Form Modal */}
         {showCreateAttFormModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div onClick={() => setShowCreateAttFormModal(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" />
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden">
+            <div onClick={() => setShowCreateAttFormModal(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <div className="bg-white border border-gray-100 rounded-3xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden">
               {/* Header */}
-              <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="h-9 w-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-                    <ClipboardList className="h-5 w-5 text-indigo-400" />
+                  <div className="h-9 w-9 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center">
+                    <ClipboardList className="h-5 w-5 text-purple-600" />
                   </div>
                   <div>
-                    <h3 className="text-base font-bold text-slate-100">Generate Attendance Form</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Create a daily link for students to self-mark attendance.</p>
+                    <h3 className="text-base font-bold text-gray-900">Generate Attendance Form</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Create a daily link for students to self-mark attendance.</p>
                   </div>
                 </div>
-                <button onClick={() => setShowCreateAttFormModal(false)} className="h-8 w-8 rounded-lg border border-slate-800 bg-slate-950/40 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer">
+                <button onClick={() => setShowCreateAttFormModal(false)} className="h-8 w-8 rounded-lg border border-gray-200 bg-gray-50 text-gray-400 hover:text-gray-700 flex items-center justify-center transition-colors cursor-pointer">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -2028,9 +2132,8 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               {/* Body */}
               <div className="p-6 space-y-5">
                 {attFormMsg.text && (
-                  <div className={`flex items-start gap-2.5 p-3.5 rounded-xl text-xs font-semibold border ${
-                    attFormMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                  }`}>
+                  <div className={`flex items-start gap-2.5 p-3.5 rounded-xl text-xs font-semibold border ${attFormMsg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                    }`}>
                     {attFormMsg.type === 'success' ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" /> : <XCircle className="h-4 w-4 shrink-0 mt-0.5" />}
                     <span>{attFormMsg.text}</span>
                   </div>
@@ -2058,14 +2161,14 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                   </div>
                 </div>
 
-                <div className="bg-indigo-500/5 border border-indigo-500/15 rounded-xl p-3 text-xs text-indigo-300/70 leading-relaxed">
-                  A unique link will be generated. Students submit their course email to mark themselves as <strong className="text-indigo-300">Present (+{attFormPresentMark})</strong>. When expired/closed, all remaining students are automatically marked <strong className="text-rose-300">Absent ({attFormAbsentMark})</strong>.
+                <div className="bg-purple-50 border border-purple-100 rounded-xl p-3 text-xs text-purple-700 leading-relaxed">
+                  A unique link will be generated. Students submit their course email to mark themselves as <strong className="text-purple-800">Present (+{attFormPresentMark})</strong>. When expired/closed, all remaining students are automatically marked <strong className="text-rose-600">Absent ({attFormAbsentMark})</strong>.
                 </div>
               </div>
 
               {/* Footer */}
-              <div className="p-6 border-t border-slate-800 flex justify-end gap-3">
-                <button onClick={() => setShowCreateAttFormModal(false)} className="px-5 py-2.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer">
+              <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
+                <button onClick={() => setShowCreateAttFormModal(false)} className="px-5 py-2.5 text-xs font-semibold text-gray-500 hover:text-gray-900 transition-colors cursor-pointer">
                   Cancel
                 </button>
                 <button
@@ -2077,64 +2180,110 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                   Generate Form
                 </button>
               </div>
-              </div>
             </div>
+          </div>
         )}
 
-        
+
 
         {/* TAB 4: TASK MATRIX */}
         {activeTab === 'tasks' && (
           <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-200">Daily Task Submission Grid</h3>
-              <p className="text-xs text-slate-500 mt-1">Grades daily tasks. Click cell to toggle submission states.</p>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h3 className="text-base font-extrabold text-gray-900">Task Submission Matrix</h3>
+                <p className="text-xs text-gray-500 mt-1">Select dropdown to toggle task submission (1 mark for complete, 0 for incomplete).</p>
+              </div>
+              <button
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-[10px] font-bold uppercase tracking-wider px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-md"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Google Form Link
+              </button>
             </div>
 
-            <div className="w-full max-w-full overflow-x-auto border border-slate-850 rounded-2xl bg-slate-950/20 relative">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+            <div className="w-full max-w-full overflow-x-auto border border-gray-100 rounded-3xl bg-white shadow-sm relative">
+              <table className="w-full text-left border-collapse min-w-[1000px]">
                 <thead>
-                  <tr className="bg-slate-900/60 border-b border-slate-850">
-                    <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500 sticky left-0 bg-slate-950 z-20 w-44">Student Name</th>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    {/* Pinned left columns */}
+                    <th className="p-4 text-xs font-extrabold uppercase tracking-widest text-gray-500 sticky left-0 bg-gray-50 z-20 w-52 border-r border-gray-100/50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)]">Student Info</th>
+                    <th className="p-4 text-xs font-extrabold uppercase tracking-widest text-gray-500 sticky left-[13rem] bg-gray-50 z-20 w-32 border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)]">Tier & Risk</th>
+
+                    {/* Summary Columns */}
+                    <th className="p-4 text-[11px] font-extrabold uppercase tracking-widest text-gray-500 text-center w-28 bg-purple-50/30 border-r border-gray-100">Task Points</th>
+
+                    {/* Dynamic Date Columns */}
                     {dates.map(date => {
                       const parts = date.split('-');
                       return (
-                        <th key={date} className="p-4 text-center text-xs font-bold uppercase tracking-wider text-slate-500">
+                        <th key={date} className="p-4 text-center text-[11px] font-extrabold uppercase tracking-widest text-gray-500 min-w-[125px]">
                           {parts[2]}/{parts[1]}/{parts[0]}
                         </th>
                       );
                     })}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-850/60">
+                <tbody className="divide-y divide-gray-100 font-semibold text-xs text-gray-700">
                   {filteredStudents.map(student => (
-                    <tr key={student._id} className="hover:bg-slate-900/10">
-                      <td className="p-4 font-bold text-slate-200 text-xs sticky left-0 bg-slate-950 z-10 w-44 border-r border-slate-850/40 truncate">
-                        {student.name}
+                    <tr key={student._id} className="hover:bg-gray-50/50 group transition-colors">
+                      {/* Pinned left columns */}
+                      <td className="p-4 font-bold text-gray-900 sticky left-0 bg-white z-10 w-52 border-r border-gray-100/50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)] truncate transition-colors">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${student.name}`}
+                            alt="Avatar"
+                            className="h-9 w-9 rounded-full border border-purple-500/20 shadow-sm"
+                          />
+                          <div className="min-w-0">
+                            <h4 className="font-extrabold text-gray-900 text-[13px] truncate">{student.name}</h4>
+                            <span className="text-[11px] text-gray-500 block mt-0.5 font-semibold truncate">{student.email}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-4 sticky left-[13rem] bg-white z-10 w-32 border-r border-gray-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.03)] transition-colors">
+                        <div className="flex flex-col gap-1.5 items-start">
+                          <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-widest ${student.tier === 'Tier A'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                            : student.tier === 'Tier B'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                              : 'bg-gray-100 text-gray-650 border border-gray-200'
+                            }`}>
+                            {student.tier || 'Tier C'}
+                          </span>
+                          <span className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-widest ${student.riskStatus === 'High'
+                            ? 'bg-rose-50 text-rose-750 border border-rose-100'
+                            : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                            }`}>
+                            {student.riskStatus === 'High' ? 'At Risk' : 'Low Risk'}
+                          </span>
+                        </div>
                       </td>
 
+                      {/* Summary Columns */}
+                      <td className="p-4 text-purple-600 text-sm font-black text-center bg-purple-50/10 border-r border-gray-100">{student.totalTaskMark || 0}</td>
+
+                      {/* Dynamic Date Cells */}
                       {dates.map(date => {
-                        const status = taskMatrix[student._id]?.[date] || 'Complete';
+                        const status = taskMatrix[student._id]?.[date] || 'Incomplete';
                         const cellId = `tsk-${student._id}-${date}`;
                         const isSaving = matrixSavingState[cellId];
 
                         return (
                           <td key={date} className="p-3 text-center">
-                            <button
-                              onClick={() => handleToggleTaskCell(student._id, date, status)}
+                            <select
+                              value={status}
+                              onChange={(e) => handleSetTaskStatus(student._id, date, e.target.value)}
                               disabled={isSaving}
-                              className={`h-9 w-24 mx-auto rounded-xl flex items-center justify-center border text-[10px] font-bold uppercase tracking-wider transition-all ${
-                                status === 'Complete'
-                                  ? 'bg-indigo-600/15 border-indigo-500/20 text-indigo-400'
-                                  : 'bg-slate-950/60 border-slate-800 text-slate-500'
-                              } disabled:opacity-40`}
+                              className={`h-9 w-full min-w-[115px] rounded-xl text-[10px] font-black uppercase tracking-widest px-2 cursor-pointer outline-none transition-all border shadow-sm ${status === 'Complete'
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                                : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                                } disabled:opacity-40 appearance-none text-center`}
+                              style={{ textAlignLast: 'center' }}
                             >
-                              {isSaving ? (
-                                <div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                              ) : (
-                                <span>{status}</span>
-                              )}
-                            </button>
+                              <option value="Complete" className="text-emerald-700 font-bold bg-white">Complete (1)</option>
+                              <option value="Incomplete" className="text-gray-500 font-bold bg-white">Incomplete (0)</option>
+                            </select>
                           </td>
                         );
                       })}
@@ -2147,110 +2296,270 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
         )}
 
         {/* TAB 5: POINTS / LEADERBOARD */}
-        {activeTab === 'points' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-            {/* Table layout of points */}
-            <div className="lg:col-span-2 space-y-4">
-              <div>
-                <h3 className="text-sm font-bold text-slate-200">Points Summary List</h3>
-                <p className="text-xs text-slate-500 mt-1">Detailed breakdown of attendance and task marks.</p>
+        {activeTab === 'points' && (() => {
+          if (leaderboardSorted.length === 0) {
+            return (
+              <div className="py-20 text-center">
+                <h3 className="text-gray-500 font-bold text-lg">No leaderboard data found</h3>
+                <p className="text-gray-400 text-sm mt-2">Add students and update their marks to see rankings.</p>
               </div>
+            );
+          }
+          const first = leaderboardSorted[0];
+          const second = leaderboardSorted[1];
+          const third = leaderboardSorted[2];
+          const rest = leaderboardSorted.slice(3, 8);
 
-              <div className="overflow-x-auto border border-slate-850 rounded-2xl bg-slate-950/20">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-900/60 border-b border-slate-850">
-                      <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500">Student</th>
-                      <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-center">Attendance Pts</th>
-                      <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-center">Task Pts</th>
-                      <th className="p-4 text-xs font-bold uppercase tracking-wider text-slate-500 text-right">Total Marks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-850/60">
-                    {filteredStudents.map(student => (
-                      <tr key={student._id} className="hover:bg-slate-900/10 text-xs">
-                        <td className="p-4 font-semibold text-slate-200">{student.name}</td>
-                        <td className="p-4 text-center text-slate-450">{student.totalAttendanceMark}</td>
-                        <td className="p-4 text-center text-slate-450">{student.totalTaskMark}</td>
-                        <td className="p-4 text-right font-bold text-indigo-400">{student.totalMark} pts</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          const getInitial = (n: string) => n.split(' ').map(x => x[0]).join('').toUpperCase().slice(0, 2);
 
-            {/* Leaderboard layout */}
-            <div className="bg-slate-950/40 border border-slate-850 p-6 rounded-2xl space-y-5">
-              <h4 className="text-xs font-bold text-slate-200 flex items-center gap-2 border-b border-slate-850 pb-3">
-                <Trophy className="h-4 w-4 text-amber-500" />
-                <span>Cohort Leaderboard</span>
-              </h4>
+          return (
+            <div className="space-y-6">
+              {/* Header inside Tab */}
+              <div className="flex items-center justify-between flex-wrap gap-4 border-b border-gray-100 pb-4">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-extrabold text-gray-900">Points & Leaderboard</h2>
+                  <span className="text-lg">✩</span>
+                </div>
 
-              <div className="space-y-3.5">
-                {leaderboardSorted.map((student, idx) => (
-                  <div key={student._id} className="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 border border-slate-850">
-                    <div className="flex items-center gap-3">
-                      <span className={`h-6 w-6 rounded flex items-center justify-center font-bold text-xs ${
-                        idx === 0 ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' :
-                        idx === 1 ? 'bg-slate-400/20 text-slate-300 border border-slate-400/30' :
-                        idx === 2 ? 'bg-orange-850/20 text-orange-450 border border-orange-800/30' :
-                        'bg-slate-800 text-slate-500'
-                      }`}>
-                        {idx + 1}
-                      </span>
-                      <span className="text-xs font-semibold text-slate-200">{student.name}</span>
-                    </div>
-                    <span className="text-xs font-extrabold text-slate-300">{student.totalMark} pts</span>
+                <div className="flex items-center gap-2">
+                  {/* Toggle buttons */}
+                  <div className="bg-gray-100 p-1 rounded-full flex gap-1 border border-gray-200/50">
+                    <button className="bg-purple-600 text-white shadow-sm px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider">
+                      Global
+                    </button>
+                    <button className="text-gray-500 hover:text-gray-800 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider">
+                      Project
+                    </button>
                   </div>
-                ))}
+
+                  <button className="px-3.5 py-1.5 border border-gray-200 bg-white hover:bg-gray-50 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-600 transition-colors flex items-center gap-1.5">
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    Filter
+                  </button>
+                </div>
+              </div>
+
+              {/* Main Content Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+                {/* Left Side: Top 3 Podium and list */}
+                <div className="lg:col-span-5 space-y-6">
+                  {/* Elevated Podium Cards */}
+                  <div className="grid grid-cols-3 gap-3 pt-6 items-end">
+
+                    {/* #2 Elena R. */}
+                    <div className="bg-white border border-gray-100 rounded-3xl p-4.5 text-center shadow-sm flex flex-col items-center justify-between h-44 relative">
+                      <div className="h-10 w-10 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center font-extrabold text-blue-700 text-xs shadow-sm select-none mb-2">
+                        {second ? getInitial(second.name) : '-'}
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">#2</span>
+                        <h4 className="font-extrabold text-gray-900 text-xs leading-tight line-clamp-1 mt-0.5">{second?.name || '-'}</h4>
+                      </div>
+                      <span className="text-xs font-black text-purple-700 mt-2">{second?.totalMark?.toLocaleString() || 0}</span>
+                    </div>
+
+                    {/* #1 Marcus T. */}
+                    <div className="bg-white border-2 border-yellow-400 rounded-3xl p-5 text-center shadow-md flex flex-col items-center justify-between h-52 relative -translate-y-2">
+                      {/* Trophy absolute badge */}
+                      <div className="absolute -top-3.5 -right-2 h-7 w-7 rounded-full bg-yellow-400 border-2 border-white flex items-center justify-center text-xs shadow-md select-none">
+                        🏆
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-yellow-50 border border-yellow-200 flex items-center justify-center font-extrabold text-yellow-700 text-sm shadow-sm select-none mb-3">
+                        {first ? getInitial(first.name) : '-'}
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-yellow-600 font-extrabold uppercase tracking-widest flex items-center justify-center gap-0.5">
+                          #1
+                        </span>
+                        <h4 className="font-black text-gray-900 text-sm leading-tight line-clamp-1 mt-0.5">{first?.name || '-'}</h4>
+                      </div>
+                      <span className="text-sm font-black text-orange-600 mt-2">{first?.totalMark?.toLocaleString() || 0}</span>
+                    </div>
+
+                    {/* #3 Sarah K. */}
+                    <div className="bg-white border border-gray-100 rounded-3xl p-4.5 text-center shadow-sm flex flex-col items-center justify-between h-40 relative">
+                      <div className="h-10 w-10 rounded-full bg-pink-100 border border-pink-200 flex items-center justify-center font-extrabold text-pink-700 text-xs shadow-sm select-none mb-2">
+                        {third ? getInitial(third.name) : '-'}
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">#3</span>
+                        <h4 className="font-extrabold text-gray-900 text-xs leading-tight line-clamp-1 mt-0.5">{third?.name || '-'}</h4>
+                      </div>
+                      <span className="text-xs font-black text-purple-700 mt-2">{third?.totalMark?.toLocaleString() || 0}</span>
+                    </div>
+
+                  </div>
+
+                  {/* Ranks 4+ List */}
+                  <div className="bg-white border border-gray-100 rounded-3xl p-5 shadow-sm space-y-3.5">
+                    {rest.map((student: any, idx) => {
+                      const rankNum = idx + 4;
+                      const initial = getInitial(student.name);
+                      const subText = student.project?.name || student.tier || 'Software Engineer';
+                      const trendType = student.trend || (idx % 2 === 0 ? 'up' : 'flat');
+
+                      return (
+                        <div key={student._id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0 last:pb-0">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-extrabold text-gray-400 w-4">{rankNum}</span>
+                            <div className="h-8 w-8 rounded-full bg-black flex items-center justify-center text-xs font-bold text-white select-none">
+                              {initial}
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-extrabold text-gray-900 leading-tight">{student.name}</h4>
+                              <span className="text-[9px] text-gray-400 font-semibold block mt-0.5">{subText}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-gray-800">{student.totalMark.toLocaleString()}</span>
+                            {trendType === 'up' && <span className="text-[10px] text-emerald-600 font-bold">▲</span>}
+                            {trendType === 'flat' && <span className="text-[10px] text-gray-400 font-bold">-</span>}
+                            {trendType === 'down' && <span className="text-[10px] text-rose-500 font-bold">▼</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <button className="w-full text-center text-[10px] font-black uppercase tracking-wider text-purple-600 pt-3 border-t border-gray-50 hover:text-purple-700 transition-colors">
+                      View Full Leaderboard
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Side: Points Breakdown Table */}
+                <div className="lg:col-span-7 bg-white border border-gray-100 rounded-3xl p-6 shadow-sm space-y-5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base font-extrabold text-gray-900">Points Breakdown</h3>
+                    <div className="flex gap-2">
+                      <button className="p-2 border border-gray-100 bg-white hover:bg-gray-50 rounded-xl text-gray-400 hover:text-gray-700 transition-colors">
+                        <FileText className="h-4 w-4" />
+                      </button>
+                      <button className="p-2 border border-gray-100 bg-white hover:bg-gray-50 rounded-xl text-gray-400 hover:text-gray-700 transition-colors">
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-gray-500">
+                      <thead className="bg-gray-50 text-[9px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">
+                        <tr>
+                          <th className="px-4 py-3">Student</th>
+                          <th className="px-4 py-3">Attendance</th>
+                          <th className="px-4 py-3">Tasks</th>
+                          <th className="px-4 py-3">Distribution & Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 font-semibold text-xs text-gray-700">
+                        {[first, second, third, ...rest.slice(0, 1)].map((student: any) => {
+                          const total = student.totalAttendanceMark + student.totalTaskMark || student.totalMark || 1;
+                          const attPercent = Math.max(15, Math.min(85, Math.round((student.totalAttendanceMark / total) * 100)));
+                          const tskPercent = 100 - attPercent;
+                          const initial = getInitial(student.name);
+
+                          return (
+                            <tr key={student._id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="h-7 w-7 rounded-full bg-black flex items-center justify-center text-[10px] font-bold text-white select-none">
+                                    {initial}
+                                  </div>
+                                  <span className="font-extrabold text-gray-900 text-xs">{student.name}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 text-gray-500 font-bold">
+                                {student.totalAttendanceMark?.toLocaleString() || "1,200"} pts
+                              </td>
+                              <td className="px-4 py-4 text-gray-500 font-bold">
+                                {student.totalTaskMark?.toLocaleString() || "3,940"} pts
+                              </td>
+                              <td className="px-4 py-4">
+                                <div className="flex items-center gap-4">
+                                  {/* Progress bar split */}
+                                  <div className="w-28 h-2 bg-gray-100 rounded-full overflow-hidden flex shrink-0">
+                                    <div className="bg-blue-400 h-full" style={{ width: `${attPercent}%` }} />
+                                    <div className="bg-purple-600 h-full" style={{ width: `${tskPercent}%` }} />
+                                  </div>
+                                  <span className="font-extrabold text-gray-900 text-xs">
+                                    {(student.totalMark || total).toLocaleString()}
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Legend & footer */}
+                  <div className="flex items-center justify-between pt-4 border-t border-gray-100 flex-wrap gap-4">
+                    <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-blue-400" />
+                        <span>Attendance</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-purple-600" />
+                        <span>Tasks</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                      Showing top 10 of {leaderboardSorted.length || 45} students
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-
+          );
+        })()}
       </div>
 
-      {/* 360-Degree Profile Side Drawer */}
-      {showDrawer && selectedStudent && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+      {/* 360-Degree Profile Modal */}
+      {mounted && showDrawer && selectedStudent && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
           {/* Overlay */}
-          <div onClick={() => setShowDrawer(false)} className="absolute inset-0 bg-slate-955/80 backdrop-blur-sm"></div>
+          <div onClick={() => setShowDrawer(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-all"></div>
 
-          {/* Drawer Panel */}
-          <div className="bg-slate-900 border-l border-slate-800 w-full max-w-2xl h-full relative z-10 flex flex-col justify-between shadow-2xl overflow-hidden animate-slideLeft">
+          {/* Modal Panel */}
+          <div className="w-full max-w-4xl rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] relative z-10 overflow-hidden bg-white border border-gray-100 animate-slide-in-up flex flex-col max-h-[90vh]">
             {/* Header */}
-            <div className="p-6 border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md flex items-center justify-between">
+            <div className="p-6 border-b border-gray-100 bg-white flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="h-14 w-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center font-black text-xl shadow-inner uppercase tracking-wider">
-                  {selectedStudent.name.charAt(0)}
+                <div className="h-14 w-14 rounded-full border-2 border-purple-500/30 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                  <img
+                    src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedStudent.name}`}
+                    alt="Avatar"
+                    className="h-full w-full"
+                  />
                 </div>
                 <div>
-                  <h3 className="font-black text-slate-100 text-xl tracking-tight leading-none">{selectedStudent.name}</h3>
-                  <span className="text-xs text-slate-400 block mt-1.5 font-medium">{selectedStudent.email}</span>
+                  <h3 className="font-extrabold text-gray-900 text-xl tracking-tight leading-none">{selectedStudent.name}</h3>
+                  <span className="text-xs text-gray-500 block mt-1.5 font-semibold">{selectedStudent.email}</span>
                   {selectedStudent.phoneNumber && (
-                    <span className="text-[10px] text-slate-500 block mt-1 font-bold tracking-widest">{selectedStudent.phoneNumber}</span>
+                    <span className="text-[10px] text-gray-400 block mt-1 font-black tracking-widest">{selectedStudent.phoneNumber}</span>
                   )}
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setShowDrawer(false)}
-                className="h-9 w-9 rounded-xl bg-slate-950/40 text-slate-400 hover:text-slate-100 flex items-center justify-center border border-slate-800 hover:border-slate-700 transition-all"
+                className="h-9 w-9 rounded-xl bg-gray-50 text-gray-500 hover:text-gray-900 flex items-center justify-center border border-gray-200 hover:border-gray-300 transition-all cursor-pointer shadow-sm"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             {/* Tabbed Selectors Toolbar */}
-            <div className="flex border-b border-slate-800/80 bg-slate-950/20 px-6 py-3 gap-2.5 select-none">
+            <div className="flex border-b border-gray-100 bg-gray-50/50 px-6 py-3 gap-2.5 select-none">
               <button
                 type="button"
                 onClick={() => setDrawerTab('overview')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all border ${
-                  drawerTab === 'overview'
-                    ? 'bg-indigo-650 text-white border-indigo-600 shadow-lg shadow-indigo-600/15'
-                    : 'text-slate-450 hover:text-slate-200 border-transparent hover:bg-slate-800/30'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${drawerTab === 'overview'
+                  ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/10'
+                  : 'text-gray-550 hover:text-gray-800 border-transparent hover:bg-gray-100'
+                  }`}
               >
                 <User className="h-3.5 w-3.5 shrink-0" />
                 <span>Overview & Links</span>
@@ -2258,11 +2567,10 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               <button
                 type="button"
                 onClick={() => setDrawerTab('career')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all border ${
-                  drawerTab === 'career'
-                    ? 'bg-indigo-655 text-white border-indigo-600 shadow-lg shadow-indigo-600/15'
-                    : 'text-slate-450 hover:text-slate-200 border-transparent hover:bg-slate-800/30'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${drawerTab === 'career'
+                  ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/10'
+                  : 'text-gray-550 hover:text-gray-800 border-transparent hover:bg-gray-100'
+                  }`}
               >
                 <Briefcase className="h-3.5 w-3.5 shrink-0" />
                 <span>Career & Forms</span>
@@ -2270,11 +2578,10 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               <button
                 type="button"
                 onClick={() => setDrawerTab('tracker')}
-                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all border ${
-                  drawerTab === 'tracker'
-                    ? 'bg-indigo-655 text-white border-indigo-600 shadow-lg shadow-indigo-600/15'
-                    : 'text-slate-450 hover:text-slate-200 border-transparent hover:bg-slate-800/30'
-                }`}
+                className={`flex items-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${drawerTab === 'tracker'
+                  ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-600/10'
+                  : 'text-gray-550 hover:text-gray-800 border-transparent hover:bg-gray-100'
+                  }`}
               >
                 <Calendar className="h-3.5 w-3.5 shrink-0" />
                 <span>Attendance Tracker</span>
@@ -2282,42 +2589,38 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
             </div>
 
             {/* Scrollable Workspace Panels */}
-            <div className="flex-1 p-6 overflow-y-auto space-y-6 bg-slate-900/40">
-              
+            <div className="flex-1 p-6 overflow-y-auto space-y-6 bg-white">
+
               {/* TAB 1: OVERVIEW & LINKS */}
               {drawerTab === 'overview' && (
                 <div className="space-y-6 animate-fadeIn">
                   {/* Status Badges */}
                   <div className="flex flex-wrap gap-2">
-                    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${
-                      selectedStudent.tier === 'Tier A' ? 'bg-amber-500/10 border-amber-500/20 text-amber-500' :
-                      selectedStudent.tier === 'Tier B' ? 'bg-slate-400/10 border-slate-400/20 text-slate-350' :
-                      'bg-orange-800/10 border-orange-800/20 text-orange-450'
-                    }`}>
-                      {selectedStudent.tier}
+                    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${selectedStudent.tier === 'Tier A' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' :
+                      selectedStudent.tier === 'Tier B' ? 'bg-amber-50 border-amber-100 text-amber-700' :
+                        'bg-gray-100 border-gray-200 text-gray-650'
+                      }`}>
+                      {selectedStudent.tier || 'Tier C'}
                     </span>
-                    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${
-                      selectedStudent.riskStatus === 'High' ? 'bg-rose-500/10 border-rose-500/20 text-rose-455' :
-                      selectedStudent.riskStatus === 'Low' ? 'bg-slate-800 border-slate-700 text-slate-400' :
-                      'bg-emerald-500/10 border-emerald-500/20 text-emerald-450'
-                    }`}>
+                    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${selectedStudent.riskStatus === 'High' ? 'bg-rose-50 border-rose-100 text-rose-700' :
+                      'bg-emerald-50 border-emerald-100 text-emerald-700'
+                      }`}>
                       Risk: {selectedStudent.riskStatus}
                     </span>
-                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-slate-850 border border-slate-750 text-slate-300">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg bg-purple-50 border border-purple-100 text-purple-700">
                       {selectedStudent.hiredStatus}
                     </span>
-                    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${
-                      selectedStudent.activeStatus === 'Active' ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-450'
-                    }`}>
+                    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border ${selectedStudent.activeStatus === 'Active' ? 'bg-blue-50 border-blue-100 text-blue-700' : 'bg-rose-50 border-rose-100 text-rose-700'
+                      }`}>
                       {selectedStudent.activeStatus}
                     </span>
                     {selectedStudent.attendanceStreak > 0 && (
-                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border bg-emerald-50 border-emerald-100 text-emerald-700">
                         🔥 {selectedStudent.attendanceStreak} Day Streak
                       </span>
                     )}
                     {selectedStudent.absentStreak > 0 && (
-                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border bg-rose-500/10 border-rose-500/20 text-rose-450">
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-lg border bg-rose-50 border-rose-100 text-rose-700">
                         ⚠️ {selectedStudent.absentStreak} Day Absent
                       </span>
                     )}
@@ -2325,17 +2628,17 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
                   {/* Performance Indicators */}
                   <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-slate-950/45 border border-slate-800/80 p-4.5 rounded-2xl text-center shadow-sm">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Total Points</span>
-                      <p className="text-2xl font-black text-slate-100 mt-1">{selectedStudent.totalMark || 0}</p>
+                    <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-2xl text-center shadow-sm">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Total Points</span>
+                      <p className="text-2xl font-black text-gray-900 mt-1">{selectedStudent.totalMark || 0}</p>
                     </div>
-                    <div className="bg-slate-950/45 border border-slate-800/80 p-4.5 rounded-2xl text-center shadow-sm">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Mock Score</span>
-                      <p className="text-2xl font-black text-slate-100 mt-1">{selectedStudent.mockInterviewScore || 0}%</p>
+                    <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-2xl text-center shadow-sm">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Mock Score</span>
+                      <p className="text-2xl font-black text-gray-900 mt-1">{selectedStudent.mockInterviewScore || 0}%</p>
                     </div>
-                    <div className="bg-slate-950/45 border border-slate-800/80 p-4.5 rounded-2xl text-center shadow-sm">
-                      <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Cohort Rank</span>
-                      <p className="text-2xl font-black text-indigo-400 mt-1">
+                    <div className="bg-gray-50 border border-gray-100 p-4.5 rounded-2xl text-center shadow-sm">
+                      <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Project Rank</span>
+                      <p className="text-2xl font-black text-purple-600 mt-1">
                         #{leaderboardSorted.findIndex(s => s._id === selectedStudent._id) + 1}
                       </p>
                     </div>
@@ -2343,91 +2646,91 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
                   {/* Profile Links & Projects Grid */}
                   <div className="space-y-3">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">Submitted Links & Projects</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">Submitted Links & Projects</span>
                     <div className="grid grid-cols-2 gap-3.5">
                       {/* GitHub */}
-                      {selectedStudent.profiles.github || selectedStudent.github ? (
+                      {selectedStudent.profiles?.github || selectedStudent.github ? (
                         <a
-                          href={selectedStudent.profiles.github || selectedStudent.github}
+                          href={selectedStudent.profiles?.github || selectedStudent.github}
                           target="_blank"
                           rel="noreferrer"
-                          className="bg-slate-950/45 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-slate-900 group"
+                          className="bg-white border border-gray-100 hover:border-purple-200 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-gray-50/50 group"
                         >
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850 group-hover:border-slate-750">
-                            <GithubIcon className="h-4.5 w-4.5 text-slate-400 group-hover:text-white" />
+                          <div className="h-8 w-8 bg-purple-50 rounded-lg flex items-center justify-center border border-purple-100/50 group-hover:border-purple-200">
+                            <GithubIcon className="h-4.5 w-4.5 text-purple-600" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-300 font-extrabold uppercase block tracking-wider">GitHub Link</span>
-                            <span className="text-[9px] text-slate-500 block truncate max-w-[120px]">View code profile</span>
+                            <span className="text-[10px] text-gray-900 font-extrabold uppercase block tracking-wider">GitHub Link</span>
+                            <span className="text-[9px] text-gray-550 block truncate max-w-[120px]">View code profile</span>
                           </div>
-                          <ExternalLink className="h-3 w-3 text-slate-500 ml-auto" />
+                          <ExternalLink className="h-3 w-3 text-gray-400 ml-auto" />
                         </a>
                       ) : (
-                        <div className="bg-slate-950/20 border border-dashed border-slate-850 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-50 select-none">
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850">
-                            <GithubIcon className="h-4.5 w-4.5 text-slate-600" />
+                        <div className="bg-gray-50 border border-dashed border-gray-200 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-60 select-none">
+                          <div className="h-8 w-8 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
+                            <GithubIcon className="h-4.5 w-4.5 text-gray-400" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-500 font-extrabold uppercase block tracking-wider">GitHub</span>
-                            <span className="text-[9px] text-slate-600 block">Not Submitted</span>
+                            <span className="text-[10px] text-gray-400 font-extrabold uppercase block tracking-wider">GitHub</span>
+                            <span className="text-[9px] text-gray-500 block">Not Submitted</span>
                           </div>
                         </div>
                       )}
 
                       {/* LinkedIn */}
-                      {selectedStudent.profiles.linkedin || selectedStudent.linkedin ? (
+                      {selectedStudent.profiles?.linkedin || selectedStudent.linkedin ? (
                         <a
-                          href={selectedStudent.profiles.linkedin || selectedStudent.linkedin}
+                          href={selectedStudent.profiles?.linkedin || selectedStudent.linkedin}
                           target="_blank"
                           rel="noreferrer"
-                          className="bg-slate-950/45 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-slate-900 group"
+                          className="bg-white border border-gray-100 hover:border-purple-200 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-gray-50/50 group"
                         >
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850 group-hover:border-slate-750">
-                            <LinkedinIcon className="h-4.5 w-4.5 text-indigo-400 group-hover:text-indigo-300" />
+                          <div className="h-8 w-8 bg-purple-50 rounded-lg flex items-center justify-center border border-purple-100/50 group-hover:border-purple-200">
+                            <LinkedinIcon className="h-4.5 w-4.5 text-purple-650" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-300 font-extrabold uppercase block tracking-wider">LinkedIn Link</span>
-                            <span className="text-[9px] text-slate-500 block truncate max-w-[120px]">View professional</span>
+                            <span className="text-[10px] text-gray-900 font-extrabold uppercase block tracking-wider">LinkedIn Link</span>
+                            <span className="text-[9px] text-gray-550 block truncate max-w-[120px]">View professional</span>
                           </div>
-                          <ExternalLink className="h-3 w-3 text-slate-500 ml-auto" />
+                          <ExternalLink className="h-3 w-3 text-gray-400 ml-auto" />
                         </a>
                       ) : (
-                        <div className="bg-slate-950/20 border border-dashed border-slate-850 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-50 select-none">
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850">
-                            <LinkedinIcon className="h-4.5 w-4.5 text-slate-600" />
+                        <div className="bg-gray-50 border border-dashed border-gray-200 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-60 select-none">
+                          <div className="h-8 w-8 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
+                            <LinkedinIcon className="h-4.5 w-4.5 text-gray-400" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-500 font-extrabold uppercase block tracking-wider">LinkedIn</span>
-                            <span className="text-[9px] text-slate-600 block">Not Submitted</span>
+                            <span className="text-[10px] text-gray-400 font-extrabold uppercase block tracking-wider">LinkedIn</span>
+                            <span className="text-[9px] text-gray-500 block">Not Submitted</span>
                           </div>
                         </div>
                       )}
 
                       {/* Resume */}
-                      {selectedStudent.profiles.resume || selectedStudent.resume ? (
+                      {selectedStudent.profiles?.resume || selectedStudent.resume ? (
                         <a
-                          href={selectedStudent.profiles.resume || selectedStudent.resume}
+                          href={selectedStudent.profiles?.resume || selectedStudent.resume}
                           target="_blank"
                           rel="noreferrer"
-                          className="bg-slate-950/45 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-slate-900 group"
+                          className="bg-white border border-gray-100 hover:border-purple-200 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-gray-50/50 group"
                         >
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850 group-hover:border-slate-750">
-                            <FileText className="h-4.5 w-4.5 text-emerald-450 group-hover:text-emerald-400" />
+                          <div className="h-8 w-8 bg-purple-50 rounded-lg flex items-center justify-center border border-purple-100/50 group-hover:border-purple-200">
+                            <FileText className="h-4.5 w-4.5 text-purple-600" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-300 font-extrabold uppercase block tracking-wider">Resume PDF</span>
-                            <span className="text-[9px] text-slate-500 block truncate max-w-[120px]">View credentials</span>
+                            <span className="text-[10px] text-gray-900 font-extrabold uppercase block tracking-wider">Resume PDF</span>
+                            <span className="text-[9px] text-gray-550 block truncate max-w-[120px]">View credentials</span>
                           </div>
-                          <ExternalLink className="h-3 w-3 text-slate-550 ml-auto" />
+                          <ExternalLink className="h-3 w-3 text-gray-400 ml-auto" />
                         </a>
                       ) : (
-                        <div className="bg-slate-950/20 border border-dashed border-slate-850 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-50 select-none">
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850">
-                            <FileText className="h-4.5 w-4.5 text-slate-600" />
+                        <div className="bg-gray-50 border border-dashed border-gray-200 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-60 select-none">
+                          <div className="h-8 w-8 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
+                            <FileText className="h-4.5 w-4.5 text-gray-400" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-500 font-extrabold uppercase block tracking-wider">Resume</span>
-                            <span className="text-[9px] text-slate-600 block">Not Submitted</span>
+                            <span className="text-[10px] text-gray-400 font-extrabold uppercase block tracking-wider">Resume</span>
+                            <span className="text-[9px] text-gray-500 block">Not Submitted</span>
                           </div>
                         </div>
                       )}
@@ -2438,25 +2741,25 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                           href={selectedStudent.bestProject1}
                           target="_blank"
                           rel="noreferrer"
-                          className="bg-slate-950/45 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-slate-900 group"
+                          className="bg-white border border-gray-100 hover:border-purple-200 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-gray-50/50 group"
                         >
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850 group-hover:border-slate-750">
-                            <BookOpen className="h-4.5 w-4.5 text-purple-450 group-hover:text-purple-400" />
+                          <div className="h-8 w-8 bg-purple-50 rounded-lg flex items-center justify-center border border-purple-100/50 group-hover:border-purple-200">
+                            <BookOpen className="h-4.5 w-4.5 text-purple-600" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-300 font-extrabold uppercase block tracking-wider">Best Project 1</span>
-                            <span className="text-[9px] text-slate-500 block truncate max-w-[120px]">View live deployment</span>
+                            <span className="text-[10px] text-gray-900 font-extrabold uppercase block tracking-wider">Best Project 1</span>
+                            <span className="text-[9px] text-gray-550 block truncate max-w-[120px]">View live deployment</span>
                           </div>
-                          <ExternalLink className="h-3 w-3 text-slate-550 ml-auto" />
+                          <ExternalLink className="h-3 w-3 text-gray-400 ml-auto" />
                         </a>
                       ) : (
-                        <div className="bg-slate-950/20 border border-dashed border-slate-850 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-50 select-none">
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850">
-                            <BookOpen className="h-4.5 w-4.5 text-slate-600" />
+                        <div className="bg-gray-50 border border-dashed border-gray-200 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-60 select-none">
+                          <div className="h-8 w-8 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
+                            <BookOpen className="h-4.5 w-4.5 text-gray-400" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-500 font-extrabold uppercase block tracking-wider">Project 1</span>
-                            <span className="text-[9px] text-slate-600 block">Not Submitted</span>
+                            <span className="text-[10px] text-gray-400 font-extrabold uppercase block tracking-wider">Project 1</span>
+                            <span className="text-[9px] text-gray-550 block">Not Submitted</span>
                           </div>
                         </div>
                       )}
@@ -2467,25 +2770,25 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                           href={selectedStudent.bestProject2}
                           target="_blank"
                           rel="noreferrer"
-                          className="bg-slate-950/45 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-slate-900 group"
+                          className="bg-white border border-gray-100 hover:border-purple-200 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-gray-50/50 group"
                         >
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850 group-hover:border-slate-750">
-                            <BookOpen className="h-4.5 w-4.5 text-orange-450 group-hover:text-orange-405" />
+                          <div className="h-8 w-8 bg-purple-50 rounded-lg flex items-center justify-center border border-purple-100/50 group-hover:border-purple-200">
+                            <BookOpen className="h-4.5 w-4.5 text-purple-600" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-300 font-extrabold uppercase block tracking-wider">Best Project 2</span>
-                            <span className="text-[9px] text-slate-500 block truncate max-w-[120px]">View live deployment</span>
+                            <span className="text-[10px] text-gray-900 font-extrabold uppercase block tracking-wider">Best Project 2</span>
+                            <span className="text-[9px] text-gray-550 block truncate max-w-[120px]">View live deployment</span>
                           </div>
-                          <ExternalLink className="h-3 w-3 text-slate-550 ml-auto" />
+                          <ExternalLink className="h-3 w-3 text-gray-400 ml-auto" />
                         </a>
                       ) : (
-                        <div className="bg-slate-950/20 border border-dashed border-slate-850 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-50 select-none">
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850">
-                            <BookOpen className="h-4.5 w-4.5 text-slate-600" />
+                        <div className="bg-gray-50 border border-dashed border-gray-200 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-60 select-none">
+                          <div className="h-8 w-8 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
+                            <BookOpen className="h-4.5 w-4.5 text-gray-400" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-500 font-extrabold uppercase block tracking-wider">Project 2</span>
-                            <span className="text-[9px] text-slate-600 block">Not Submitted</span>
+                            <span className="text-[10px] text-gray-400 font-extrabold uppercase block tracking-wider">Project 2</span>
+                            <span className="text-[9px] text-gray-550 block">Not Submitted</span>
                           </div>
                         </div>
                       )}
@@ -2496,25 +2799,25 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                           href={selectedStudent.portfolio}
                           target="_blank"
                           rel="noreferrer"
-                          className="bg-slate-950/45 border border-slate-800 hover:border-slate-700 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-slate-900 group"
+                          className="bg-white border border-gray-100 hover:border-purple-200 p-3.5 rounded-2xl flex items-center gap-3.5 transition-all hover:bg-gray-50/50 group"
                         >
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850 group-hover:border-slate-750">
-                            <Award className="h-4.5 w-4.5 text-cyan-455 group-hover:text-cyan-350" />
+                          <div className="h-8 w-8 bg-purple-50 rounded-lg flex items-center justify-center border border-purple-100/50 group-hover:border-purple-200">
+                            <Award className="h-4.5 w-4.5 text-purple-600" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-300 font-extrabold uppercase block tracking-wider">Portfolio Site</span>
-                            <span className="text-[9px] text-slate-500 block truncate max-w-[120px]">View showcase</span>
+                            <span className="text-[10px] text-gray-900 font-extrabold uppercase block tracking-wider">Portfolio Site</span>
+                            <span className="text-[9px] text-gray-550 block truncate max-w-[120px]">View showcase</span>
                           </div>
-                          <ExternalLink className="h-3 w-3 text-slate-550 ml-auto" />
+                          <ExternalLink className="h-3 w-3 text-gray-400 ml-auto" />
                         </a>
                       ) : (
-                        <div className="bg-slate-950/20 border border-dashed border-slate-850 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-50 select-none">
-                          <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center border border-slate-850">
-                            <Award className="h-4.5 w-4.5 text-slate-600" />
+                        <div className="bg-gray-50 border border-dashed border-gray-200 p-3.5 rounded-2xl flex items-center gap-3.5 opacity-60 select-none">
+                          <div className="h-8 w-8 bg-gray-100 rounded-lg flex items-center justify-center border border-gray-200">
+                            <Award className="h-4.5 w-4.5 text-gray-400" />
                           </div>
                           <div className="text-left">
-                            <span className="text-[10px] text-slate-500 font-extrabold uppercase block tracking-wider">Portfolio</span>
-                            <span className="text-[9px] text-slate-600 block">Not Submitted / N/A</span>
+                            <span className="text-[10px] text-gray-400 font-extrabold uppercase block tracking-wider">Portfolio</span>
+                            <span className="text-[9px] text-gray-550 block">Not Submitted / N/A</span>
                           </div>
                         </div>
                       )}
@@ -2523,21 +2826,21 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
                   {/* Mentorship logs timeline wrapper */}
                   <div className="space-y-3">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">Mentorship logs (Last Updates)</span>
-                    <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-4.5 min-h-[140px] flex flex-col justify-between shadow-inner">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">Mentorship logs (Last Updates)</span>
+                    <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4.5 min-h-[140px] flex flex-col justify-between shadow-inner">
                       {selectedStudent.lastUpdateNote ? (
                         <div>
-                          <p className="text-xs text-slate-300 leading-relaxed italic bg-slate-900/40 border border-slate-850/80 p-3.5 rounded-xl">
+                          <p className="text-xs text-gray-800 leading-relaxed italic bg-white border border-gray-100 p-3.5 rounded-xl">
                             &quot;{selectedStudent.lastUpdateNote}&quot;
                           </p>
                           {selectedStudent.lastUpdateDate && (
-                            <span className="text-[10px] text-slate-550 block mt-3 font-semibold">
+                            <span className="text-[10px] text-gray-400 block mt-3 font-semibold">
                               Updated: {new Date(selectedStudent.lastUpdateDate).toLocaleString()}
                             </span>
                           )}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-500 italic py-6 text-center">No notes logged yet.</p>
+                        <p className="text-xs text-gray-400 italic py-6 text-center">No notes logged yet.</p>
                       )}
                     </div>
                   </div>
@@ -2547,42 +2850,70 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               {/* TAB 2: CAREER & FORM DETAILS */}
               {drawerTab === 'career' && (
                 <div className="space-y-6 animate-fadeIn">
-                  {/* Cohort Identity Information */}
+                  {/* Project Identity Information */}
                   <div className="space-y-3">
-                    <span className="text-[10px] font-black uppercase text-slate-500 block tracking-wider">Education & Cohort Registration</span>
-                    <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4.5 text-xs text-slate-350">
+                    <span className="text-[10px] font-black uppercase text-gray-450 block tracking-wider">Education & Project Registration</span>
+                    <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 space-y-4.5 text-xs text-gray-800">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Discord Username</span>
-                          <p className="font-extrabold text-slate-200 mt-1">{selectedStudent.discordUsername || 'Not Provided'}</p>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Discord Username</span>
+                          {selectedStudent.discordUsername && selectedStudent.discordUsername !== 'Not Provided' ? (
+                            <p className="font-extrabold text-gray-900 mt-1 text-xs">{selectedStudent.discordUsername}</p>
+                          ) : (
+                            <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                          )}
                         </div>
                         <div>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">L2 Batch</span>
-                          <p className="font-extrabold text-slate-200 mt-1">{selectedStudent.level2Batch || 'Not Provided'}</p>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">L2 Batch</span>
+                          {selectedStudent.level2Batch && selectedStudent.level2Batch !== 'Not Provided' ? (
+                            <p className="font-extrabold text-gray-900 mt-1 text-xs">{selectedStudent.level2Batch}</p>
+                          ) : (
+                            <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                          )}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Occupation Status</span>
-                          <p className="font-extrabold text-slate-200 mt-1 leading-relaxed">{selectedStudent.currentOccupation || 'Not Provided'}</p>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Occupation Status</span>
+                          {selectedStudent.currentOccupation && selectedStudent.currentOccupation !== 'Not Provided' ? (
+                            <p className="font-extrabold text-gray-900 mt-1 text-xs leading-relaxed">{selectedStudent.currentOccupation}</p>
+                          ) : (
+                            <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                          )}
                         </div>
                         <div>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Next Expected Exam</span>
-                          <p className="font-extrabold text-slate-200 mt-1">{selectedStudent.nextExamDate || 'Not Provided'}</p>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Next Expected Exam</span>
+                          {selectedStudent.nextExamDate && selectedStudent.nextExamDate !== 'Not Provided' ? (
+                            <p className="font-extrabold text-gray-900 mt-1 text-xs">{selectedStudent.nextExamDate}</p>
+                          ) : (
+                            <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                          )}
                         </div>
                       </div>
                       <div>
-                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Education Institute</span>
-                        <p className="font-extrabold text-slate-200 mt-1 leading-relaxed">{selectedStudent.educationInstitute || 'Not Provided'}</p>
+                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Education Institute</span>
+                        {selectedStudent.educationInstitute && selectedStudent.educationInstitute !== 'Not Provided' ? (
+                          <p className="font-extrabold text-gray-900 mt-1 text-xs leading-relaxed">{selectedStudent.educationInstitute}</p>
+                        ) : (
+                          <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                        )}
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Group/Subject</span>
-                          <p className="font-extrabold text-slate-200 mt-1 leading-relaxed">{selectedStudent.groupSubject || 'Not Provided'}</p>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Group/Subject</span>
+                          {selectedStudent.groupSubject && selectedStudent.groupSubject !== 'Not Provided' ? (
+                            <p className="font-extrabold text-gray-900 mt-1 text-xs leading-relaxed">{selectedStudent.groupSubject}</p>
+                          ) : (
+                            <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                          )}
                         </div>
                         <div>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Current Address</span>
-                          <p className="font-extrabold text-slate-200 mt-1 whitespace-pre-wrap leading-relaxed">{selectedStudent.currentAddress || 'Not Provided'}</p>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Current Address</span>
+                          {selectedStudent.currentAddress && selectedStudent.currentAddress !== 'Not Provided' ? (
+                            <p className="font-extrabold text-gray-900 mt-1 text-xs whitespace-pre-wrap leading-relaxed">{selectedStudent.currentAddress}</p>
+                          ) : (
+                            <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2590,58 +2921,106 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
                   {/* Career & Relocation Preferences */}
                   <div className="space-y-3">
-                    <span className="text-[10px] font-black uppercase text-slate-500 block tracking-wider">Career Priorities & Relocation</span>
-                    <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-4.5 text-xs text-slate-350">
+                    <span className="text-[10px] font-black uppercase text-gray-450 block tracking-wider">Career Priorities & Relocation</span>
+                    <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 space-y-4.5 text-xs text-gray-800">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Primary Focus</span>
-                          <p className="font-extrabold text-slate-200 mt-1 leading-relaxed">{selectedStudent.primaryFocus || 'Not Provided'}</p>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Primary Focus</span>
+                          {selectedStudent.primaryFocus && selectedStudent.primaryFocus !== 'Not Provided' ? (
+                            <p className="font-extrabold text-gray-900 mt-1 text-xs leading-relaxed">{selectedStudent.primaryFocus}</p>
+                          ) : (
+                            <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                          )}
                         </div>
                         <div>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Placement Timeline</span>
-                          <p className="font-extrabold text-slate-200 mt-1 leading-relaxed">{selectedStudent.placementTimeline || 'Not Provided'}</p>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Placement Timeline</span>
+                          {selectedStudent.placementTimeline && selectedStudent.placementTimeline !== 'Not Provided' ? (
+                            <p className="font-extrabold text-gray-900 mt-1 text-xs leading-relaxed">{selectedStudent.placementTimeline}</p>
+                          ) : (
+                            <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                          )}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Job Type Preference</span>
-                          <p className="font-extrabold text-slate-200 mt-1 leading-relaxed">{selectedStudent.jobTypePreference || 'Not Provided'}</p>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Job Type Preference</span>
+                          {selectedStudent.jobTypePreference && selectedStudent.jobTypePreference !== 'Not Provided' ? (
+                            <p className="font-extrabold text-gray-900 mt-1 text-xs leading-relaxed">{selectedStudent.jobTypePreference}</p>
+                          ) : (
+                            <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                          )}
                         </div>
                         <div>
-                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Dhaka Relocation</span>
-                          <p className="font-extrabold text-slate-200 mt-1 leading-relaxed">{selectedStudent.dhakaRelocate || 'Not Provided'}</p>
+                          <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Dhaka Relocation</span>
+                          {selectedStudent.dhakaRelocate && selectedStudent.dhakaRelocate !== 'Not Provided' ? (
+                            <p className="font-extrabold text-gray-900 mt-1 text-xs leading-relaxed">{selectedStudent.dhakaRelocate}</p>
+                          ) : (
+                            <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                          )}
                         </div>
                       </div>
                       <div>
-                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Onsite In Home District</span>
-                        <p className="font-extrabold text-slate-200 mt-1 leading-relaxed">{selectedStudent.onsiteInHomeDistrict || 'Not Provided'}</p>
+                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider block">Onsite In Home District</span>
+                        {selectedStudent.onsiteInHomeDistrict && selectedStudent.onsiteInHomeDistrict !== 'Not Provided' ? (
+                          <p className="font-extrabold text-gray-900 mt-1 text-xs leading-relaxed">{selectedStudent.onsiteInHomeDistrict}</p>
+                        ) : (
+                          <span className="text-gray-350 text-xs font-bold italic mt-1 block">Not Provided</span>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   {/* Bootcamp Commitments & Reality Note */}
                   <div className="space-y-3">
-                    <span className="text-[10px] font-black uppercase text-slate-500 block tracking-wider">Bootcamp Agreements & Commitments</span>
-                    <div className="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 space-y-5 text-xs text-slate-350">
+                    <span className="text-[10px] font-black uppercase text-gray-450 block tracking-wider">Bootcamp Agreements & Commitments</span>
+                    <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 space-y-5 text-xs text-gray-800">
                       <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-slate-900 border border-slate-850 p-3 rounded-xl text-center">
-                          <span className="text-[8px] text-slate-500 font-bold uppercase block tracking-wider">Placement Team</span>
-                          <p className="font-extrabold text-xs mt-1 text-slate-200">{selectedStudent.placementCommitment || 'N/A'}</p>
+                        <div className="bg-white border border-gray-150 p-3 rounded-2xl text-center shadow-sm">
+                          <span className="text-[8px] text-gray-400 font-bold uppercase block tracking-wider mb-1">Placement Team</span>
+                          {selectedStudent.placementCommitment && selectedStudent.placementCommitment !== 'N/A' ? (
+                            <span className="inline-block bg-purple-50 text-purple-700 border border-purple-100 px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold uppercase mt-1">
+                              {selectedStudent.placementCommitment}
+                            </span>
+                          ) : (
+                            <span className="inline-block bg-gray-100 text-gray-400 px-2.5 py-1.5 rounded-xl text-[10px] font-bold italic mt-1">
+                              N/A
+                            </span>
+                          )}
                         </div>
-                        <div className="bg-slate-900 border border-slate-850 p-3 rounded-xl text-center">
-                          <span className="text-[8px] text-slate-500 font-bold uppercase block tracking-wider">Attendance Daily</span>
-                          <p className="font-extrabold text-xs mt-1 text-slate-200">{selectedStudent.bootcampCommitment || 'N/A'}</p>
+                        <div className="bg-white border border-gray-150 p-3 rounded-2xl text-center shadow-sm">
+                          <span className="text-[8px] text-gray-400 font-bold uppercase block tracking-wider mb-1">Attendance Daily</span>
+                          {selectedStudent.bootcampCommitment && selectedStudent.bootcampCommitment !== 'N/A' ? (
+                            <span className="inline-block bg-purple-50 text-purple-700 border border-purple-100 px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold uppercase mt-1">
+                              {selectedStudent.bootcampCommitment}
+                            </span>
+                          ) : (
+                            <span className="inline-block bg-gray-100 text-gray-400 px-2.5 py-1.5 rounded-xl text-[10px] font-bold italic mt-1">
+                              N/A
+                            </span>
+                          )}
                         </div>
-                        <div className="bg-slate-900 border border-slate-850 p-3 rounded-xl text-center">
-                          <span className="text-[8px] text-slate-500 font-bold uppercase block tracking-wider">Daily Tasks</span>
-                          <p className="font-extrabold text-xs mt-1 text-slate-200">{selectedStudent.taskCommitment || 'N/A'}</p>
+                        <div className="bg-white border border-gray-150 p-3 rounded-2xl text-center shadow-sm">
+                          <span className="text-[8px] text-gray-400 font-bold uppercase block tracking-wider mb-1">Daily Tasks</span>
+                          {selectedStudent.taskCommitment && selectedStudent.taskCommitment !== 'N/A' ? (
+                            <span className="inline-block bg-purple-50 text-purple-700 border border-purple-100 px-2.5 py-1.5 rounded-xl text-[10px] font-extrabold uppercase mt-1">
+                              {selectedStudent.taskCommitment}
+                            </span>
+                          ) : (
+                            <span className="inline-block bg-gray-100 text-gray-400 px-2.5 py-1.5 rounded-xl text-[10px] font-bold italic mt-1">
+                              N/A
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <div className="border-t border-slate-850/60 pt-4.5">
-                        <span className="text-[9px] text-slate-550 font-bold uppercase block">Current Reality & Situation Description</span>
-                        <p className="font-medium text-slate-350 mt-2 whitespace-pre-wrap leading-relaxed bg-[#0c0810] border border-slate-850 p-4 rounded-xl italic">
-                          {selectedStudent.currentSituationNote ? `"${selectedStudent.currentSituationNote}"` : 'Not Provided'}
-                        </p>
+                      <div className="border-t border-gray-150 pt-4.5">
+                        <span className="text-[9px] text-gray-450 font-bold uppercase block">Current Reality & Situation Description</span>
+                        {selectedStudent.currentSituationNote && selectedStudent.currentSituationNote !== 'Not Provided' ? (
+                          <p className="font-medium text-gray-800 mt-2 whitespace-pre-wrap leading-relaxed bg-purple-50/45 border border-purple-100/50 p-4 rounded-xl italic">
+                            &quot;{selectedStudent.currentSituationNote}&quot;
+                          </p>
+                        ) : (
+                          <span className="text-gray-350 text-xs font-bold italic mt-2 block">No situation description logged.</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2652,116 +3031,139 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
               {drawerTab === 'tracker' && (
                 <div className="space-y-6 animate-fadeIn">
                   <div className="space-y-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Cohort Calendar Session Grid</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Project Calendar Session Grid</span>
                     {(!dates || dates.length === 0 || (selectedStudent.totalAttendance === 0 && selectedStudent.totalAbsent === 0)) ? (
-                      <div className="bg-slate-955/45 border border-slate-850 p-8 rounded-2xl text-center space-y-3">
-                        <div className="h-14 w-14 bg-slate-900 border border-slate-800 text-slate-500 rounded-2xl flex items-center justify-center mx-auto shadow-md">
-                          <Calendar className="h-6 w-6 text-indigo-400" />
+                      <div className="bg-gray-50 border border-gray-100 p-8 rounded-2xl text-center space-y-3">
+                        <div className="h-14 w-14 bg-white border border-gray-200 text-gray-400 rounded-2xl flex items-center justify-center mx-auto shadow-md">
+                          <Calendar className="h-6 w-6 text-purple-600" />
                         </div>
                         <div className="space-y-1">
-                          <p className="text-sm font-extrabold text-slate-200">No Operations Tracking Logged Yet</p>
-                          <p className="text-xs text-slate-500 max-w-[280px] mx-auto leading-relaxed">
-                            This student has no attendance status marked or point history logged inside this cohort matrix.
+                          <p className="text-sm font-extrabold text-gray-900">No Operations Tracking Logged Yet</p>
+                          <p className="text-xs text-gray-500 max-w-[280px] mx-auto leading-relaxed">
+                            This student has no attendance status marked or point history logged inside this project matrix.
                           </p>
                         </div>
                       </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {/* Month and Year Header */}
-                        <div className="flex items-center justify-between bg-slate-955/45 border border-slate-850 p-4 rounded-xl shadow-sm">
-                          <span className="text-xs font-bold text-slate-200">Session Month</span>
-                          <span className="text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-extrabold uppercase px-3 py-1.5 rounded-lg tracking-widest">
-                            {(() => {
-                              const dateObj = new Date(dates[0]);
-                              return dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
-                            })()}
-                          </span>
-                        </div>
+                    ) : (() => {
+                      const availableMonths = Array.from(new Set(dates.map(d => d.substring(0, 7)))).sort();
+                      const filteredDatesForMonth = dates.filter(date => !selectedMonth || date.startsWith(selectedMonth));
 
-                        {/* Calendar Grid card */}
-                        <div className="bg-slate-950/40 border border-slate-800 p-5 rounded-2xl space-y-5">
-                          <div className="grid grid-cols-7 gap-2.5">
-                            {dates.map((date) => {
-                              const status = attendanceMatrix[selectedStudent._id]?.[date] || 'Unmarked';
-                              const statusColor = status === 'Present' 
-                                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-450 shadow-emerald-500/5' 
-                                : status === 'Absent' 
-                                ? 'bg-rose-500/10 border border-rose-500/20 text-rose-455 shadow-rose-500/5'
-                                : 'bg-amber-500/10 border border-amber-500/20 text-amber-550 shadow-amber-500/5';
-                              
-                              return (
-                                <div
-                                  key={date}
-                                  title={`${date}: ${status}`}
-                                  className={`h-9 w-full rounded-lg flex items-center justify-center font-extrabold text-[10px] select-none border transition-all ${statusColor}`}
-                                >
-                                  {date.split('-')[2]}
+                      return (
+                        <div className="space-y-4">
+                          {/* Month and Year Selector Header */}
+                          <div className="flex items-center justify-between bg-gray-50 border border-gray-100 p-4 rounded-xl shadow-sm">
+                            <span className="text-xs font-bold text-gray-900">Session Month</span>
+                            <select
+                              value={selectedMonth}
+                              onChange={(e) => setSelectedMonth(e.target.value)}
+                              className="bg-white border border-gray-200 text-xs font-bold text-purple-700 px-3 py-1.5 rounded-lg outline-none cursor-pointer focus:border-purple-400 shadow-sm"
+                            >
+                              <option value="">All Months</option>
+                              {availableMonths.map((mCode) => {
+                                const [yr, mn] = mCode.split('-');
+                                const dateObj = new Date(parseInt(yr), parseInt(mn) - 1, 1);
+                                const monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+                                return (
+                                  <option key={mCode} value={mCode}>
+                                    {monthName}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+
+                          {filteredDatesForMonth.length === 0 ? (
+                            <div className="bg-gray-50 border border-gray-100 p-8 rounded-2xl text-center">
+                              <p className="text-xs text-gray-400 italic">No attendance records found for the selected month.</p>
+                            </div>
+                          ) : (
+                            <>
+                              {/* Calendar Grid card */}
+                              <div className="bg-gray-50 border border-gray-100 p-5 rounded-2xl space-y-5">
+                                <div className="grid grid-cols-7 gap-2.5">
+                                  {filteredDatesForMonth.map((date) => {
+                                    const status = attendanceMatrix[selectedStudent._id]?.[date] || 'Unmarked';
+                                    const statusColor = status === 'Present'
+                                      ? 'bg-emerald-50 border border-emerald-100 text-emerald-700'
+                                      : status === 'Absent'
+                                        ? 'bg-rose-50 border border-rose-100 text-rose-700'
+                                        : 'bg-amber-50 border border-amber-100 text-amber-700';
+
+                                    return (
+                                      <div
+                                        key={date}
+                                        title={`${date}: ${status}`}
+                                        className={`h-9 w-full rounded-lg flex items-center justify-center font-extrabold text-[10px] select-none border transition-all ${statusColor}`}
+                                      >
+                                        {date.split('-')[2]}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
-                              );
-                            })}
-                          </div>
 
-                          {/* Legend status indicators */}
-                          <div className="flex gap-4.5 text-[9px] text-slate-500 justify-center border-t border-slate-900/60 pt-4 font-semibold uppercase tracking-wider">
-                            <div className="flex items-center gap-1.5">
-                              <div className="h-3 w-3 rounded bg-emerald-500/20 border border-emerald-500/30 shadow-inner"></div>
-                              <span>Present (+10 Pts)</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <div className="h-3 w-3 rounded bg-rose-500/20 border border-rose-500/30 shadow-inner"></div>
-                              <span>Absent (-5 Pts)</span>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <div className="h-3 w-3 rounded bg-amber-500/20 border border-amber-500/30 shadow-inner"></div>
-                              <span>Leave (0 Pts)</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Timeline list */}
-                        <div className="space-y-3">
-                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">Date-Wise Points Breakdown Timeline</span>
-                          <div className="bg-slate-955/20 border border-slate-800/80 rounded-xl p-3.5 max-h-[220px] overflow-y-auto space-y-2 shadow-inner">
-                            {dates.map((date) => {
-                              const status = attendanceMatrix[selectedStudent._id]?.[date] || 'Unmarked';
-                              const taskStatus = taskMatrix[selectedStudent._id]?.[date] || 'Incomplete';
-                              
-                              let points = 0;
-                              if (status === 'Present') points += 10;
-                              if (status === 'Absent') points -= 5;
-                              if (taskStatus === 'Complete') points += 20;
-
-                              const statusBadge = status === 'Present'
-                                ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/20'
-                                : status === 'Absent'
-                                ? 'bg-rose-500/10 text-rose-455 border border-rose-500/20'
-                                : 'bg-amber-500/10 text-amber-550 border border-amber-500/20';
-
-                              return (
-                                <div key={date} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-slate-955/40 border border-slate-850/80 hover:border-slate-800 hover:bg-slate-950/20 transition-all">
-                                  <span className="font-semibold text-slate-400">
-                                    {new Date(date).toLocaleDateString('default', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                  </span>
-                                  <div className="flex items-center gap-2">
-                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md ${statusBadge}`}>
-                                      {status}
-                                    </span>
-                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
-                                      taskStatus === 'Complete' ? 'bg-indigo-500/10 text-indigo-450 border border-indigo-500/20' : 'bg-slate-800 text-slate-500'
-                                    }`}>
-                                      Task: {taskStatus}
-                                    </span>
-                                    <span className={`text-[10px] font-black ${points >= 0 ? 'text-indigo-400' : 'text-rose-455'}`}>
-                                      {points >= 0 ? `+${points}` : points} Pts
-                                    </span>
+                                {/* Legend status indicators */}
+                                <div className="flex gap-4.5 text-[9px] text-gray-500 justify-center border-t border-gray-100 pt-4 font-semibold uppercase tracking-wider">
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="h-3 w-3 rounded bg-emerald-50 border border-emerald-100 shadow-inner"></div>
+                                    <span>Present (+10 Pts)</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="h-3 w-3 rounded bg-rose-50 border border-rose-100 shadow-inner"></div>
+                                    <span>Absent (-5 Pts)</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="h-3 w-3 rounded bg-amber-50 border border-amber-100 shadow-inner"></div>
+                                    <span>Leave (0 Pts)</span>
                                   </div>
                                 </div>
-                              );
-                            })}
-                          </div>
+                              </div>
+
+                              {/* Timeline list */}
+                              <div className="space-y-3">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">Date-Wise Points Breakdown Timeline</span>
+                                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 max-h-[220px] overflow-y-auto space-y-2 shadow-inner">
+                                  {filteredDatesForMonth.map((date) => {
+                                    const status = attendanceMatrix[selectedStudent._id]?.[date] || 'Unmarked';
+                                    const taskStatus = taskMatrix[selectedStudent._id]?.[date] || 'Incomplete';
+
+                                    let points = 0;
+                                    if (status === 'Present') points += 10;
+                                    if (status === 'Absent') points -= 5;
+                                    if (taskStatus === 'Complete') points += 20;
+
+                                    const statusBadge = status === 'Present'
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                      : status === 'Absent'
+                                        ? 'bg-rose-50 text-rose-700 border border-rose-100'
+                                        : 'bg-amber-50 text-amber-700 border border-amber-100';
+
+                                    return (
+                                      <div key={date} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-white border border-gray-100 hover:bg-gray-50 transition-all">
+                                        <span className="font-semibold text-gray-500">
+                                          {new Date(date).toLocaleDateString('default', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md ${statusBadge}`}>
+                                            {status}
+                                          </span>
+                                          <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-md ${taskStatus === 'Complete' ? 'bg-purple-50 text-purple-700 border border-purple-100' : 'bg-gray-100 text-gray-500'
+                                            }`}>
+                                            Task: {taskStatus}
+                                          </span>
+                                          <span className={`text-[10px] font-black ${points >= 0 ? 'text-purple-650' : 'text-rose-700'}`}>
+                                            {points >= 0 ? `+${points}` : points} Pts
+                                          </span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -2770,19 +3172,19 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
             {/* Note Appending Form Footer (Visible only inside overview panel tab) */}
             {drawerTab === 'overview' && (
-              <form onSubmit={handleAddProfileNote} className="p-4 border-t border-slate-800/80 bg-slate-950/40 flex items-center gap-3.5 backdrop-blur-md">
+              <form onSubmit={handleAddProfileNote} className="p-4 border-t border-gray-150 bg-gray-50 flex items-center gap-3.5 backdrop-blur-md">
                 <input
                   type="text"
                   required
                   placeholder="Append mentorship note..."
                   value={newNote}
                   onChange={(e) => setNewNote(e.target.value)}
-                  className="flex-1 text-xs bg-slate-950 border border-slate-800 focus:border-indigo-500 text-slate-200 px-4 py-3 rounded-xl outline-none placeholder:text-slate-655"
+                  className="flex-1 text-xs bg-white border border-gray-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 text-gray-800 px-4 py-3 rounded-xl outline-none placeholder:text-gray-400"
                 />
                 <button
                   type="submit"
                   disabled={noteSaving}
-                  className="bg-indigo-600 hover:bg-indigo-550 text-white p-3 rounded-xl transition-all shadow-lg shadow-indigo-650/20 disabled:opacity-50"
+                  className="bg-purple-600 hover:bg-purple-550 text-white p-3 rounded-xl transition-all shadow-md shadow-purple-600/10 disabled:opacity-50 cursor-pointer"
                 >
                   {noteSaving ? (
                     <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -2794,65 +3196,70 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
             )}
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* Edit Student Modal */}
       {showEditStudentModal && editStudentData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => setShowEditStudentModal(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
-          
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl w-full max-w-xl relative z-10 overflow-hidden">
-            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-100">Edit Student Data</h3>
-              <button 
+          <div onClick={() => setShowEditStudentModal(false)} className="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+
+          <div className="bg-white border border-gray-100 rounded-3xl shadow-2xl w-full max-w-xl relative z-10 overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center">
+                  <Edit3 className="h-4.5 w-4.5 text-purple-600" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900">Edit Student Data</h3>
+              </div>
+              <button
                 onClick={() => setShowEditStudentModal(false)}
-                className="h-8 w-8 rounded-lg bg-slate-950/40 text-slate-400 hover:text-slate-100 flex items-center justify-center border border-slate-800 hover:border-slate-700 transition-colors"
+                className="h-8 w-8 rounded-lg bg-gray-50 text-gray-400 hover:text-gray-700 flex items-center justify-center border border-gray-200 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            
+
             <form onSubmit={handleUpdateStudentSubmit} className="p-6 flex flex-col max-h-[85vh]">
               {/* Scrollable fields wrapper */}
               <div className="flex-1 overflow-y-auto pr-2 space-y-4 max-h-[55vh]">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Name</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Name</label>
                     <input
                       type="text"
                       required
                       value={editStudentData.name}
-                      onChange={e => setEditStudentData({...editStudentData, name: e.target.value})}
-                      className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                      onChange={e => setEditStudentData({ ...editStudentData, name: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 transition-colors"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Email</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Email</label>
                     <input
                       type="email"
                       required
                       value={editStudentData.email}
-                      onChange={e => setEditStudentData({...editStudentData, email: e.target.value})}
-                      className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                      onChange={e => setEditStudentData({ ...editStudentData, email: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 transition-colors"
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Phone Number</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Phone Number</label>
                     <input
                       type="text"
                       value={editStudentData.phoneNumber || ''}
-                      onChange={e => setEditStudentData({...editStudentData, phoneNumber: e.target.value})}
-                      className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                      onChange={e => setEditStudentData({ ...editStudentData, phoneNumber: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 transition-colors"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Tier Status</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Tier Status</label>
                     <select
                       value={editStudentData.tier}
-                      onChange={e => setEditStudentData({...editStudentData, tier: e.target.value})}
-                      className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                      onChange={e => setEditStudentData({ ...editStudentData, tier: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors cursor-pointer"
                     >
                       <option value="Tier A">Tier A</option>
                       <option value="Tier B">Tier B</option>
@@ -2862,11 +3269,11 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Risk Status</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Risk Status</label>
                     <select
                       value={editStudentData.riskStatus}
-                      onChange={e => setEditStudentData({...editStudentData, riskStatus: e.target.value})}
-                      className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                      onChange={e => setEditStudentData({ ...editStudentData, riskStatus: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors cursor-pointer"
                     >
                       <option value="Low">Low</option>
                       <option value="Medium">Medium</option>
@@ -2874,11 +3281,11 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Hired Status</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Hired Status</label>
                     <select
                       value={editStudentData.hiredStatus}
-                      onChange={e => setEditStudentData({...editStudentData, hiredStatus: e.target.value})}
-                      className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                      onChange={e => setEditStudentData({ ...editStudentData, hiredStatus: e.target.value })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors cursor-pointer"
                     >
                       <option value="Looking">Looking</option>
                       <option value="In Job task">In Job task</option>
@@ -2890,55 +3297,55 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">GitHub URL</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">GitHub URL</label>
                     <input
                       type="text"
                       value={editStudentData.profiles?.github || ''}
-                      onChange={e => setEditStudentData({...editStudentData, profiles: {...editStudentData.profiles, github: e.target.value}})}
-                      className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                      onChange={e => setEditStudentData({ ...editStudentData, profiles: { ...editStudentData.profiles, github: e.target.value } })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">LinkedIn URL</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">LinkedIn URL</label>
                     <input
                       type="text"
                       value={editStudentData.profiles?.linkedin || ''}
-                      onChange={e => setEditStudentData({...editStudentData, profiles: {...editStudentData.profiles, linkedin: e.target.value}})}
-                      className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                      onChange={e => setEditStudentData({ ...editStudentData, profiles: { ...editStudentData.profiles, linkedin: e.target.value } })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors"
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Resume URL</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Resume URL</label>
                     <input
                       type="text"
                       value={editStudentData.profiles?.resume || ''}
-                      onChange={e => setEditStudentData({...editStudentData, profiles: {...editStudentData.profiles, resume: e.target.value}})}
-                      className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                      onChange={e => setEditStudentData({ ...editStudentData, profiles: { ...editStudentData.profiles, resume: e.target.value } })}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors"
                     />
                   </div>
                 </div>
 
                 {/* Additional Google Form Fields Section */}
-                <div className="border-t border-slate-800 pt-4 space-y-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-400">Additional Information</h4>
-                  
+                <div className="border-t border-gray-100 pt-4 space-y-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-purple-600">Additional Information</h4>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Discord Username</label>
+                      <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Discord Username</label>
                       <input
                         type="text"
                         value={editStudentData.discordUsername || ''}
-                        onChange={e => setEditStudentData({...editStudentData, discordUsername: e.target.value})}
-                        className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                        onChange={e => setEditStudentData({ ...editStudentData, discordUsername: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors"
                         placeholder="e.g. username#1234"
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Level 2 Batch</label>
+                      <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Level 2 Batch</label>
                       <select
                         value={editStudentData.level2Batch || ''}
-                        onChange={e => setEditStudentData({...editStudentData, level2Batch: e.target.value})}
-                        className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                        onChange={e => setEditStudentData({ ...editStudentData, level2Batch: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors cursor-pointer"
                       >
                         <option value="">Select L2 Batch</option>
                         <option value="Level 2 Batch 1">Level 2 Batch 1</option>
@@ -2954,11 +3361,11 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Current Occupation</label>
+                      <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Current Occupation</label>
                       <select
                         value={editStudentData.currentOccupation || ''}
-                        onChange={e => setEditStudentData({...editStudentData, currentOccupation: e.target.value})}
-                        className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                        onChange={e => setEditStudentData({ ...editStudentData, currentOccupation: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors cursor-pointer"
                       >
                         <option value="">Select Occupation</option>
                         <option value="University Student">University Student</option>
@@ -2970,12 +3377,12 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Next Exam Possible Date</label>
+                      <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Next Exam Possible Date</label>
                       <input
                         type="text"
                         value={editStudentData.nextExamDate || ''}
-                        onChange={e => setEditStudentData({...editStudentData, nextExamDate: e.target.value})}
-                        className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                        onChange={e => setEditStudentData({ ...editStudentData, nextExamDate: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors"
                         placeholder="e.g. 2026-10-15 or N/A"
                       />
                     </div>
@@ -2983,52 +3390,52 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Education Institute</label>
+                      <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Education Institute</label>
                       <input
                         type="text"
                         value={editStudentData.educationInstitute || ''}
-                        onChange={e => setEditStudentData({...editStudentData, educationInstitute: e.target.value})}
-                        className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                        onChange={e => setEditStudentData({ ...editStudentData, educationInstitute: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors"
                         placeholder="University or College Name"
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Group / Subject</label>
+                      <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Group / Subject</label>
                       <input
                         type="text"
                         value={editStudentData.groupSubject || ''}
-                        onChange={e => setEditStudentData({...editStudentData, groupSubject: e.target.value})}
-                        className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors"
+                        onChange={e => setEditStudentData({ ...editStudentData, groupSubject: e.target.value })}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors"
                         placeholder="e.g. Science, CSE, BBA"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Current Address</label>
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Current Address</label>
                     <textarea
                       value={editStudentData.currentAddress || ''}
-                      onChange={e => setEditStudentData({...editStudentData, currentAddress: e.target.value})}
+                      onChange={e => setEditStudentData({ ...editStudentData, currentAddress: e.target.value })}
                       rows={2}
-                      className="w-full bg-slate-950/50 border border-slate-800 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-indigo-500 transition-colors resize-none"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-purple-500 transition-colors resize-none"
                       placeholder="Area, Police Station, and District"
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="pt-4 mt-6 border-t border-slate-800 flex justify-end gap-3 shrink-0">
+              <div className="pt-4 mt-6 border-t border-gray-100 flex justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowEditStudentModal(false)}
-                  className="px-5 py-2.5 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
+                  className="px-5 py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-900 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={editStudentSaving}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {editStudentSaving ? (
                     <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
@@ -3076,7 +3483,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div onClick={() => setShowFormBuilderModal(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
-            
+
             <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl relative z-10 overflow-hidden flex flex-col max-h-[85vh]">
               <div className="p-6 border-b border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -3088,14 +3495,14 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                     <p className="text-xs text-slate-500 mt-0.5">Customize form inputs sent to students for detailed data collection.</p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setShowFormBuilderModal(false)}
                   className="h-8 w-8 rounded-lg bg-slate-950/40 text-slate-400 hover:text-slate-100 flex items-center justify-center border border-slate-800 hover:border-slate-700 transition-colors"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              
+
               <div className="p-6 overflow-y-auto space-y-6 flex-1 max-h-[60vh]">
                 {/* Existing fields list */}
                 <div className="space-y-4">
@@ -3111,7 +3518,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
                       if (isEditing) {
                         return (
-                          <div 
+                          <div
                             key={field.id}
                             className="bg-slate-950/45 border-l-4 border-l-indigo-600 border-y border-r border-slate-800 p-5 rounded-2xl space-y-4 shadow-md transition-all animate-fadeIn"
                           >
@@ -3195,7 +3602,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
 
                       if (isCoreField) {
                         return (
-                          <div 
+                          <div
                             key={field.id}
                             className="bg-slate-950/20 border border-slate-850/60 rounded-2xl p-4 flex items-center justify-between gap-4 select-none opacity-85 transition-all"
                           >
@@ -3234,7 +3641,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                       }
 
                       return (
-                        <div 
+                        <div
                           key={field.id}
                           className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-4 hover:border-slate-750 transition-all shadow-sm hover:shadow-md animate-fadeIn"
                         >
@@ -3299,7 +3706,7 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
                     </div>
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-350 block">Add Custom Form Field</span>
                   </div>
-                  
+
                   <div className="bg-slate-950/20 border border-slate-850/60 p-5 rounded-2xl space-y-4 shadow-inner">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
@@ -3419,28 +3826,27 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
       {showImportDetailsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div onClick={() => setShowImportDetailsModal(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
-          
+
           <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl w-full max-w-lg relative z-10 overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-slate-100">Import Student Details</h3>
                 <p className="text-xs text-slate-500 mt-1">Match by student email and merge additional info dynamically.</p>
               </div>
-              <button 
+              <button
                 onClick={() => setShowImportDetailsModal(false)}
                 className="h-8 w-8 rounded-lg bg-slate-950/40 text-slate-400 hover:text-slate-100 flex items-center justify-center border border-slate-800 hover:border-slate-700 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            
+
             <div className="p-6 space-y-6">
               {importDetailsMsg.text && (
-                <div className={`p-4 rounded-xl text-xs font-semibold leading-relaxed flex items-start gap-2.5 ${
-                  importDetailsMsg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
+                <div className={`p-4 rounded-xl text-xs font-semibold leading-relaxed flex items-start gap-2.5 ${importDetailsMsg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
                   importDetailsMsg.type === 'error' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-450' :
-                  'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'
-                }`}>
+                    'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'
+                  }`}>
                   {importDetailsMsg.type === 'error' ? <XCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" /> : <CheckCircle2 className="h-4.5 w-4.5 shrink-0 mt-0.5" />}
                   <span>{importDetailsMsg.text}</span>
                 </div>
@@ -3510,28 +3916,27 @@ This week, cohort average attendance stabilized at **84.5%**. Students demonstra
       {showBulkAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div onClick={() => setShowBulkAddModal(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
-          
+
           <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl w-full max-w-lg relative z-10 overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold text-slate-100">Add New Students (Bulk Import)</h3>
                 <p className="text-xs text-slate-500 mt-1">Upload an Excel or CSV file containing at least Name and Email.</p>
               </div>
-              <button 
+              <button
                 onClick={() => setShowBulkAddModal(false)}
                 className="h-8 w-8 rounded-lg bg-slate-950/40 text-slate-400 hover:text-white flex items-center justify-center border border-slate-800 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            
+
             <div className="p-6 space-y-6">
               {bulkAddMsg.text && (
-                <div className={`p-4 rounded-xl text-xs font-semibold leading-relaxed flex items-start gap-2.5 ${
-                  bulkAddMsg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
+                <div className={`p-4 rounded-xl text-xs font-semibold leading-relaxed flex items-start gap-2.5 ${bulkAddMsg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' :
                   bulkAddMsg.type === 'error' ? 'bg-rose-500/10 border border-rose-500/20 text-rose-450' :
-                  'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'
-                }`}>
+                    'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400'
+                  }`}>
                   {bulkAddMsg.type === 'error' ? <XCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" /> : <CheckCircle2 className="h-4.5 w-4.5 shrink-0 mt-0.5" />}
                   <span>{bulkAddMsg.text}</span>
                 </div>

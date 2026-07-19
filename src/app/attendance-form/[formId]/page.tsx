@@ -33,24 +33,14 @@ export default function AttendanceFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitResult, setSubmitResult] = useState<any>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
 
-  // Dark mode sync
+  // Force light theme on mount
   useEffect(() => {
-    document.documentElement.classList.add('dark');
-    setIsDarkMode(true);
+    document.documentElement.classList.remove('dark');
+    setIsDarkMode(false);
   }, []);
-
-  const toggleTheme = () => {
-    if (document.documentElement.classList.contains('dark')) {
-      document.documentElement.classList.remove('dark');
-      setIsDarkMode(false);
-    } else {
-      document.documentElement.classList.add('dark');
-      setIsDarkMode(true);
-    }
-  };
 
   // Fetch form info
   useEffect(() => {
@@ -135,13 +125,6 @@ export default function AttendanceFormPage() {
             <p className="text-[10px] uppercase tracking-widest font-bold" style={{ color: 'var(--text-faint)' }}>Daily Attendance</p>
           </div>
         </div>
-        <button
-          onClick={toggleTheme}
-          className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors cursor-pointer"
-          style={{ border: '1px solid var(--surface-border)', color: 'var(--text-muted)' }}
-        >
-          {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
       </header>
 
       <main className="relative z-10 flex min-h-[calc(100vh-65px)] items-center justify-center px-4 py-12">

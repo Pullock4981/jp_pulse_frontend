@@ -85,7 +85,7 @@ export default function LoginPage() {
             </div>
             <div>
               <span className="font-extrabold text-white text-base">Placement Pulse</span>
-              <span className="block text-[10px] font-bold uppercase tracking-widest text-white/60">Cohort Tracker</span>
+              <span className="block text-[10px] font-bold uppercase tracking-widest text-white/60">Project Tracker</span>
             </div>
           </div>
 
@@ -99,7 +99,7 @@ export default function LoginPage() {
               <span className="text-white/80">Place.</span>
             </h1>
             <p className="text-white/70 text-base leading-relaxed max-w-sm">
-              The complete placement intelligence platform for managing cohorts, tracking progress, and accelerating student careers.
+              The complete placement intelligence platform for managing projects, tracking progress, and accelerating student careers.
             </p>
           </div>
         </div>

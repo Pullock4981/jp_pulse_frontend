@@ -31,24 +31,10 @@ export default function StudentPublicFormPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<any>({});
-  const [isDarkMode, setIsDarkMode] = useState(false);
-
-  // Sync dark class on mount
+  // Force light theme on mount
   useEffect(() => {
-    setIsDarkMode(document.documentElement.classList.contains('dark'));
+    document.documentElement.classList.remove('dark');
   }, []);
-
-  const toggleTheme = () => {
-    if (document.documentElement.classList.contains('dark')) {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-      setIsDarkMode(false);
-    } else {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-      setIsDarkMode(true);
-    }
-  };
 
   // Fetch Form Config on Load
   useEffect(() => {
@@ -194,22 +180,15 @@ export default function StudentPublicFormPage() {
             </div>
           ) : (
             <div className="space-y-8">
-              <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/80 pb-6 gap-4 animate-fadeIn">
+              <div className="flex items-center justify-between border-b border-slate-200/80 pb-6 gap-4 animate-fadeIn">
                 <div className="space-y-1 text-left">
-                  <h2 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">
+                  <h2 className="text-xl md:text-2xl font-black text-gray-900">
                     Kaizen Student <span className="text-orange-500">Details Portal</span>
                   </h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500">
                     Fields marked with <span className="text-rose-500 font-bold">*</span> are required.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={toggleTheme}
-                  className="h-9 w-9 rounded-xl bg-gray-100 dark:bg-gray-800/60 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white flex items-center justify-center border border-gray-200 dark:border-gray-700 transition-all shrink-0"
-                >
-                  {isDarkMode ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
-                </button>
               </div>
 
               {error && (

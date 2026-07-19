@@ -80,7 +80,7 @@ export default function RegisterPage() {
             </div>
             <div>
               <span className="font-extrabold text-white text-base">Placement Pulse</span>
-              <span className="block text-[10px] font-bold uppercase tracking-widest text-white/60">Cohort Tracker</span>
+              <span className="block text-[10px] font-bold uppercase tracking-widest text-white/60">Project Tracker</span>
             </div>
           </div>
 
@@ -90,13 +90,13 @@ export default function RegisterPage() {
               <span className="text-white/80">Mentor Community</span>
             </h1>
             <p className="text-white/70 text-sm leading-relaxed max-w-sm">
-              Create your account to start managing student cohorts, tracking placement progress, and using our AI-powered tools.
+              Create your account to start managing student projects, tracking placement progress, and using our AI-powered tools.
             </p>
 
             {/* Feature list */}
             <div className="space-y-3 pt-4">
               {[
-                'Real-time cohort analytics dashboard',
+                'Real-time project analytics dashboard',
                 'AI-powered placement matching',
                 'Automated attendance & quiz system',
                 'Smart risk flagging & alerts',

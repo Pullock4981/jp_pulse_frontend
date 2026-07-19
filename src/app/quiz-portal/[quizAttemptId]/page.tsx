@@ -38,6 +38,7 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
   const [questions, setQuestions] = useState<Question[]>([]);
   const [timeLeft, setTimeLeft] = useState(900); // 15 minutes default
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // User info state
   const [isStarted, setIsStarted] = useState(false);
@@ -71,47 +72,14 @@ export default function StudentQuizPortal({ params }: { params: Promise<{ quizAt
         setQuestions(res.data.questions || []);
         setTimeLeft(res.data.durationMinutes * 60);
       } else {
-        loadMockQuiz();
+        setError('Failed to fetch quiz details.');
       }
     } catch (err) {
-      loadMockQuiz();
+      setError('Failed to fetch quiz details.');
     } finally {
       setLoading(false);
     }
   };
-
-  const loadMockQuiz = () => {
-    const mockQuiz = {
-      _id: quizId,
-      title: 'React Fundamentals Quiz',
-      durationMinutes: 15,
-      questions: [
-        {
-          _id: 'q-1',
-          questionText: 'Which React hook is used to handle side effects in functional components?',
-          options: ['useState', 'useEffect', 'useContext', 'useReducer'],
-          correctAnswer: 'useEffect'
-        },
-        {
-          _id: 'q-2',
-          questionText: 'What is the purpose of the virtual DOM in React?',
-          options: ['Direct manipulation of DOM structure', 'To render HTML pages on the server', 'Performance optimization by minimizing direct DOM updates', 'To execute JavaScript compiler commands'],
-          correctAnswer: 'Performance optimization by minimizing direct DOM updates'
-        },
-        {
-          _id: 'q-3',
-          questionText: 'In React, what are "props"?',
-          options: ['Internal component mutable state', 'External parameters passed down to components', 'CSS style properties', 'Database connection hooks'],
-          correctAnswer: 'External parameters passed down to components'
-        }
-      ]
-    };
-
-    setQuiz(mockQuiz);
-    setQuestions(mockQuiz.questions);
-    setTimeLeft(mockQuiz.durationMinutes * 60);
-  };
-
   // Timer Countdown Effect
   useEffect(() => {
     if (!isStarted || loading || submitted || cheated) return;

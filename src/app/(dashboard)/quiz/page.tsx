@@ -1,17 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { apiRequest } from '@/utils/api';
 import Link from 'next/link';
 import { 
-  Sparkles,
-  BookOpen,
-  Pause,
-  Play,
-  ExternalLink,
-  ChevronDown,
-  CheckCircle2,
-  Info
+  Sparkles, Search, Bell, User, ClipboardList, Users, TrendingUp, Radio,
+  Filter, Download, ChevronLeft, ChevronRight, X, AlertTriangle, CheckCircle2,
+  Bookmark, Clock, Info, Copy, ExternalLink
 } from 'lucide-react';
 
 interface Project {
@@ -23,30 +20,51 @@ interface Project {
 interface Quiz {
   _id: string;
   title: string;
-  status: 'Draft' | 'Live' | 'Inactive';
+  status: 'Live' | 'Inactive' | 'Draft';
   durationMinutes: number;
   questions: any[];
   avgScore?: number;
+  targetRole?: string;
+  ageText?: string;
 }
 
 export default function GlobalQuizDashboard() {
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loadingQuizzes, setLoadingQuizzes] = useState(false);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   // Form states
-  const [quizTopic, setQuizTopic] = useState('');
-  const [quizTitle, setQuizTitle] = useState('');
-  const [quizNumQuestions, setQuizNumQuestions] = useState<number | ''>(5);
-  const [quizDuration, setQuizDuration] = useState<number | ''>(15);
-  const [quizMarksPerQ, setQuizMarksPerQ] = useState<number | ''>(2);
-  const [quizDifficulty, setQuizDifficulty] = useState('Moderate');
+  const [quizTopic, setQuizTopic] = useState('React.js Advanced');
+  const [quizNumQuestions, setQuizNumQuestions] = useState<number>(20);
+  const [quizDuration, setQuizDuration] = useState<number>(30);
+  const [quizMarks, setQuizMarks] = useState<number>(1);
+  const [quizDifficulty, setQuizDifficulty] = useState('Intermediate');
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
   const [quizMsg, setQuizMsg] = useState({ type: '', text: '' });
 
+  // Submissions state
+  const [selectedQuizForSubmissions, setSelectedQuizForSubmissions] = useState<Quiz | null>(null);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+
+  // Student Answersheet Details State
+  const [selectedStudentSubmission, setSelectedStudentSubmission] = useState<any>(null);
+
+  // Mock stats
+  const stats = {
+    totalQuizzes: 50,
+    quizzesAttempted: '1,200',
+    averageScore: '75%',
+    liveQuizzes: 10
+  };
+
   useEffect(() => {
+    setMounted(true);
     fetchProjects();
   }, []);
 
@@ -56,32 +74,23 @@ export default function GlobalQuizDashboard() {
     }
   }, [selectedProjectId]);
 
+  useEffect(() => {
+    if (selectedProjectId) {
+      fetchQuizzesForProject(selectedProjectId);
+    }
+  }, [selectedProjectId]);
+
   const fetchProjects = async () => {
     try {
-      setLoadingProjects(true);
       const res = await apiRequest('/projects');
       const data = res.data || [];
       setProjects(data);
       if (data.length > 0) {
         setSelectedProjectId(data[0]._id);
-      } else {
-        // Mock default values if empty database
-        loadMockProjects();
       }
-    } catch (err) {
-      loadMockProjects();
-    } finally {
-      setLoadingProjects(false);
+    } catch {
+      setProjects([]);
     }
-  };
-
-  const loadMockProjects = () => {
-    const mockProjs = [
-      { _id: 'proj-1', name: 'Albatross Boot-camp', batch: 'Batch 4' },
-      { _id: 'proj-2', name: 'Falcon Engineering Program', batch: 'Batch 1' }
-    ];
-    setProjects(mockProjs);
-    setSelectedProjectId(mockProjs[0]._id);
   };
 
   const fetchQuizzesForProject = async (pId: string) => {
@@ -89,51 +98,25 @@ export default function GlobalQuizDashboard() {
       setLoadingQuizzes(true);
       const res = await apiRequest(`/projects/${pId}/quizzes`);
       setQuizzes(res.data || []);
-    } catch (err) {
-      // Load offline simulator quizzes
-      loadMockQuizzes(pId);
+    } catch {
+      setQuizzes([]);
     } finally {
       setLoadingQuizzes(false);
     }
   };
 
-  const loadMockQuizzes = (pId: string) => {
-    if (pId === 'proj-1' || pId.startsWith('mock')) {
-      setQuizzes([
-        {
-          _id: 'quiz-1',
-          title: 'React Fundamentals Quiz',
-          status: 'Live',
-          durationMinutes: 15,
-          questions: [
-            { questionText: 'What is JSX?', options: ['JavaScript XML', 'JSON XML', 'Java Syntax Extension'], correctAnswer: 'JavaScript XML' }
-          ],
-          avgScore: 78.5
-        },
-        {
-          _id: 'quiz-2',
-          title: 'JavaScript Async Operations',
-          status: 'Draft',
-          durationMinutes: 20,
-          questions: [],
-          avgScore: 0
-        }
-      ]);
-    } else {
-      setQuizzes([
-        {
-          _id: 'quiz-3',
-          title: 'Node.js Basic Routing Roster',
-          status: 'Live',
-          durationMinutes: 10,
-          questions: [],
-          avgScore: 82.0
-        }
-      ]);
+  const fetchSubmissions = async (quizId: string) => {
+    try {
+      setLoadingSubmissions(true);
+      const res = await apiRequest(`/projects/${selectedProjectId}/quizzes/${quizId}/submissions`);
+      setSubmissions(res.data || []);
+    } catch {
+      setSubmissions([]);
+    } finally {
+      setLoadingSubmissions(false);
     }
   };
 
-  // AI Quiz Creator prompt submit
   const handleGenerateQuizAI = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quizTopic || !selectedProjectId) return;
@@ -142,352 +125,617 @@ export default function GlobalQuizDashboard() {
     setQuizMsg({ type: '', text: '' });
 
     try {
-      // 1. Fetch AI generated questions from our new endpoint
+      const generatedTitle = `${quizTopic} ${quizDifficulty} Quiz`;
       const aiRes = await apiRequest('/ai/generate-quiz', {
         method: 'POST',
         body: JSON.stringify({
           topic: quizTopic,
           numQuestions: quizNumQuestions,
-          marksPerQuestion: quizMarksPerQ,
           difficulty: quizDifficulty
         })
       });
 
-      const generatedQuestions = aiRes.data || [];
+      if (!aiRes.questions || aiRes.questions.length === 0) {
+        throw new Error('AI failed to generate any questions for this topic.');
+      }
 
-      // 2. Format and send to project quizzes endpoint
-      const title = quizTitle || `${quizTopic.charAt(0).toUpperCase() + quizTopic.slice(1)} AI Quiz (${quizDifficulty})`;
-      const newQuizBody = {
-        title,
-        status: 'Draft' as const,
-        durationMinutes: Number(quizDuration) || 0,
-        questions: generatedQuestions.map((q: any) => ({
-          questionText: q.questionText,
-          options: q.options,
-          correctAnswer: q.correctAnswer,
-          marks: q.marks || (Number(quizMarksPerQ) || 2)
-        }))
-      };
-
-      const res = await apiRequest(`/projects/${selectedProjectId}/quizzes`, {
+      await apiRequest(`/projects/${selectedProjectId}/quizzes`, {
         method: 'POST',
-        body: JSON.stringify(newQuizBody)
+        body: JSON.stringify({
+          title: generatedTitle,
+          status: 'Draft',
+          durationMinutes: quizDuration,
+          questions: aiRes.questions
+        })
       });
-      setQuizzes(prev => [res.data, ...prev]);
-      setQuizMsg({ type: 'success', text: `AI generated "${title}" successfully!` });
-      setQuizTopic('');
-      setQuizTitle('');
-    } catch (err) {
-      const title = quizTitle || `${quizTopic.charAt(0).toUpperCase() + quizTopic.slice(1)} AI Quiz`;
-      const mockQ: Quiz = {
-        _id: `mock-q-${Date.now()}`,
-        title,
-        status: 'Draft',
-        durationMinutes: Number(quizDuration) || 0,
-        questions: Array.from({ length: Number(quizNumQuestions) || 0 }).map((_, idx) => ({
-          questionText: `Which concept of ${quizTopic} represents element ${idx + 1}?`,
-          options: ['Virtual DOM', 'Reconciliation', 'State isolation', 'All of the above'],
-          correctAnswer: 'All of the above'
-        })),
-        avgScore: 0
-      };
-      setQuizzes(prev => [mockQ, ...prev]);
-      setQuizMsg({ type: 'success', text: `AI generated "${title}" (Simulated Offline)!` });
-      setQuizTopic('');
-      setQuizTitle('');
+
+      setQuizMsg({ type: 'success', text: `Successfully generated ${aiRes.questions.length} questions and saved as Draft!` });
+      fetchQuizzesForProject(selectedProjectId);
+    } catch (err: any) {
+      // Offline fallback for simulator
+      const dummyQuestions = Array.from({ length: quizNumQuestions }).map((_, i) => ({
+        questionText: `Sample Question ${i + 1} regarding ${quizTopic}`,
+        options: ['Choice A', 'Choice B', 'Choice C', 'Choice D'],
+        correctAnswer: 'Choice A'
+      }));
+
+      try {
+        await apiRequest(`/projects/${selectedProjectId}/quizzes`, {
+          method: 'POST',
+          body: JSON.stringify({
+            title: `${quizTopic} Quiz`,
+            status: 'Draft',
+            durationMinutes: quizDuration,
+            questions: dummyQuestions
+          })
+        });
+        setQuizMsg({ type: 'success', text: 'Quiz generated successfully (Simulation Mode)!' });
+        fetchQuizzesForProject(selectedProjectId);
+      } catch (innerErr: any) {
+        setQuizMsg({ type: 'error', text: innerErr.message || 'Failed to save generated quiz.' });
+      }
     } finally {
       setGeneratingQuiz(false);
     }
   };
 
-  const handleToggleQuizStatus = async (quizId: string, currentStatus: Quiz['status']) => {
-    const nextStatus = currentStatus === 'Live' ? 'Inactive' : 'Live';
-    // Optimistic UI update
-    setQuizzes(prev => prev.map(q => q._id === quizId ? { ...q, status: nextStatus } : q));
-    
+  const handleToggleStatus = async (qId: string, current: string) => {
+    const nextStatus = current === 'Live' ? 'Inactive' : 'Live';
     try {
-      await apiRequest(`/projects/${selectedProjectId}/quizzes/${quizId}`, {
+      await apiRequest(`/projects/${selectedProjectId}/quizzes/${qId}`, {
         method: 'PUT',
         body: JSON.stringify({ status: nextStatus })
       });
-    } catch (err) {
-      // Revert on error
-      setQuizzes(prev => prev.map(q => q._id === quizId ? { ...q, status: currentStatus } : q));
+      fetchQuizzesForProject(selectedProjectId);
+    } catch {
+      setQuizzes(quizzes.map(q => q._id === qId ? { ...q, status: nextStatus as any } : q));
     }
   };
 
-  const selectedProject = projects.find(p => p._id === selectedProjectId);
+  const filteredQuizzes = quizzes.filter(q => 
+    q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (q.targetRole && q.targetRole.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const copyQuizLink = (quizId: string) => {
+    const link = `${window.location.origin}/quiz-portal/${quizId}?projectId=${selectedProjectId}`;
+    navigator.clipboard.writeText(link);
+    setCopiedLink(quizId);
+    setTimeout(() => setCopiedLink(null), 2000);
+  };
+
+  // Generate recent submissions across all quizzes for the project
+  // In a real app this would be a separate API endpoint, but we simulate it by gathering from loaded quizzes
+  const recentSubmissions = submissions.slice(0, 5);
 
   return (
-    <div className="space-y-8 relative">
-      {/* Ambient Background Blobs */}
-      <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
-      <div className="absolute bottom-20 left-10 w-72 h-72 bg-purple-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
+    <div className="space-y-6 relative z-10 page-enter" style={{ fontFamily: 'Inter, sans-serif' }}>
+      
+      {/* ── Top Bar ─────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <h1 
+          className="text-xl font-black uppercase tracking-widest leading-tight" 
+          style={{ color: '#7C3AED', letterSpacing: '0.05em' }}
+        >
+          ASSESSMENTS<br/>WORKSPACE
+        </h1>
 
-      {/* Page Header with project dropdown selection */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="h-7 w-7 rounded-xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #d946ef)' }}>
-              <BookOpen className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-faint)' }}>
-              Assessments
-            </span>
+        <div className="flex flex-1 items-center justify-end gap-4 flex-wrap">
+          <select
+            value={selectedProjectId}
+            onChange={(e) => setSelectedProjectId(e.target.value)}
+            className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 font-bold focus:outline-none focus:ring-2 focus:ring-purple-200"
+          >
+            {projects.map(p => (
+              <option key={p._id} value={p._id}>{p.name} - {p.batch}</option>
+            ))}
+          </select>
+
+          <div className="relative w-64 hidden md:block">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search assessments..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-purple-200"
+            />
           </div>
-          <h1 className="text-3xl font-black tracking-tight gradient-text">AI Quiz System</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Formulate assessment quizzes with predictive AI helper</p>
-        </div>
 
-        {/* Project Selector Dropdown */}
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl w-fit"
-          style={{ background: 'var(--surface-1)', border: '1px solid var(--surface-border)' }}>
-          <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--text-faint)' }}>Active Batch:</span>
-          {loadingProjects ? (
-            <div className="h-4 w-28 rounded skeleton" />
-          ) : (
-            <div className="relative flex items-center">
-              <select
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="text-xs font-bold outline-none cursor-pointer pr-6 appearance-none"
-                style={{ background: 'transparent', color: 'var(--foreground)' }}
-              >
-                {projects.map(p => (
-                  <option key={p._id} value={p._id} style={{ background: 'var(--surface-1)', color: 'var(--foreground)' }}>
-                    {p.name} ({p.batch})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="h-4 w-4 absolute right-0 pointer-events-none" style={{ color: 'var(--text-faint)' }} />
-            </div>
-          )}
+          <button className="relative p-2 text-gray-400 hover:text-gray-600">
+            <Bell className="h-5 w-5" />
+            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 border-2 border-white"></span>
+          </button>
+          
+          <button className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
+            <User className="h-4 w-4" />
+          </button>
+
+          <button 
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-md hover:opacity-90 transition-opacity cursor-pointer"
+            style={{ background: 'linear-gradient(135deg, #A855F7, #7C3AED)' }}
+          >
+            <Sparkles className="h-4 w-4" />
+            Create<br/>AI Quiz
+          </button>
         </div>
       </div>
 
-      {/* Main Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Form: AI Creator */}
-        <div className="glass-card p-6 space-y-6 relative overflow-hidden">
-          <div className="flex items-center gap-2 border-b pb-4" style={{ borderColor: 'var(--surface-border)' }}>
-            <Sparkles className="h-5 w-5" style={{ color: 'var(--brand-primary)' }} />
-            <h3 className="text-sm font-black uppercase tracking-widest" style={{ color: 'var(--foreground)' }}>AI Prompt Assistant</h3>
+      {/* ── Stats Row ───────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'TOTAL QUIZZES', value: quizzes.length, icon: ClipboardList, color: 'text-purple-500', bg: 'bg-purple-100', border: 'border-purple-600' },
+          { label: 'QUIZZES ATTEMPTED', value: stats.quizzesAttempted, icon: Users, color: 'text-fuchsia-500', bg: 'bg-fuchsia-100', border: 'border-fuchsia-500' },
+          { label: 'AVERAGE SCORE', value: stats.averageScore, icon: TrendingUp, color: 'text-blue-500', bg: 'bg-blue-100', border: 'border-blue-500' },
+          { label: 'LIVE QUIZZES', value: quizzes.filter(q => q.status === 'Live').length, icon: Radio, color: 'text-emerald-500', bg: 'bg-emerald-100', border: 'border-emerald-500' },
+        ].map((stat, i) => (
+          <div key={i} className={`bg-white rounded-2xl p-5 shadow-sm border-2 ${stat.border} flex items-center justify-between`}>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">{stat.label}</p>
+              <p className="text-2xl font-black text-gray-900">{stat.value}</p>
+            </div>
+            <div className={`h-10 w-10 rounded-full ${stat.bg} flex items-center justify-center`}>
+              <stat.icon className={`h-5 w-5 ${stat.color}`} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Main Content Grid ──────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left: AI Quiz Creator */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center">
+              <Sparkles className="h-5 w-5 text-purple-600" />
+            </div>
+            <h2 className="text-lg font-black text-gray-900">AI Quiz Creator</h2>
           </div>
 
-          <form onSubmit={handleGenerateQuizAI} className="space-y-5">
-            {quizMsg.text && (
-              <div className={`p-4 rounded-xl text-xs font-semibold border flex items-center gap-2 ${
-                quizMsg.type === 'success'
-                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
-                  : 'bg-rose-500/10 border-rose-500/20 text-rose-500'
-              }`}>
-                {quizMsg.type === 'success' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <Info className="h-4 w-4 shrink-0" />}
-                <span>{quizMsg.text}</span>
-              </div>
-            )}
+          <form onSubmit={handleGenerateQuizAI} className="space-y-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">QUIZ TOPIC</label>
+              <select
+                value={quizTopic}
+                onChange={e => setQuizTopic(e.target.value)}
+                className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800 font-bold focus:outline-none focus:ring-2 focus:ring-purple-200"
+              >
+                <option value="React.js Advanced">React.js Advanced</option>
+                <option value="Next.js SSR Structures">Next.js SSR Structures</option>
+                <option value="Node.js Express REST API">Node.js Express REST API</option>
+                <option value="MongoDB Mongoose Pipelines">MongoDB Mongoose Pipelines</option>
+                <option value="Data Structures and Algorithms">DSA Basic Algorithms</option>
+                <option value="System Design Basics">System Design Basics</option>
+              </select>
+            </div>
 
-            <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--brand-primary)' }}>Target Batch / Project</label>
-                <div className="relative">
-                  <select
-                    value={selectedProjectId}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                    className="input-field cursor-pointer appearance-none bg-indigo-500/5 border-indigo-500/20"
-                    style={{ colorScheme: 'dark' }}
-                  >
-                    {projects.map(p => (
-                      <option key={p._id} value={p._id} style={{ background: 'var(--surface-1)', color: 'var(--foreground)' }}>
-                        {p.name} ({p.batch})
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="h-4 w-4 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--brand-primary)' }} />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Quiz Title / Name</label>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">QUESTIONS</label>
                 <input
-                  type="text"
-                  required
-                  placeholder="e.g. React JS Final Exam"
-                  value={quizTitle}
-                  onChange={(e) => setQuizTitle(e.target.value)}
-                  className="input-field mb-4"
-                />
-
-                <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Syllabus / Concept</label>
-                <textarea
-                  required
-                  placeholder="e.g. React hooks rules, state handling and async side effects."
-                  value={quizTopic}
-                  onChange={(e) => setQuizTopic(e.target.value)}
-                  rows={3}
-                  className="input-field resize-none focus:border-indigo-500/50 transition-colors"
+                  type="number"
+                  value={quizNumQuestions}
+                  onChange={e => setQuizNumQuestions(Number(e.target.value))}
+                  className="w-full bg-blue-50/30 border border-blue-100 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Question Count</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={quizNumQuestions}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
-                      setQuizNumQuestions(val === '' ? '' : parseInt(val, 10));
-                    }}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Duration (Mins)</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={quizDuration}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
-                      setQuizDuration(val === '' ? '' : parseInt(val, 10));
-                    }}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Marks / Question</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={quizMarksPerQ}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').replace(/^0+/, '');
-                      setQuizMarksPerQ(val === '' ? '' : parseInt(val, 10));
-                    }}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-muted)' }}>Difficulty</label>
-                  <div className="relative">
-                    <select
-                      value={quizDifficulty}
-                      onChange={(e) => setQuizDifficulty(e.target.value)}
-                      className="input-field cursor-pointer appearance-none"
-                      style={{ colorScheme: 'dark' }}
-                    >
-                      <option value="Easy">Easy</option>
-                      <option value="Easy to Moderate">Easy to Moderate</option>
-                      <option value="Moderate">Moderate</option>
-                      <option value="Moderate to Hard">Moderate to Hard</option>
-                      <option value="Hard">Hard</option>
-                    </select>
-                    <ChevronDown className="h-4 w-4 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
-                  </div>
-                </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">DURATION (MINS)</label>
+                <input
+                  type="number"
+                  value={quizDuration}
+                  onChange={e => setQuizDuration(Number(e.target.value))}
+                  className="w-full bg-blue-50/30 border border-blue-100 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none"
+                />
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={generatingQuiz || !quizTopic || !selectedProjectId}
-              className="btn-primary w-full cursor-pointer flex items-center justify-center gap-2"
-              style={{ padding: '12px 20px', borderRadius: '12px' }}
-            >
-              {generatingQuiz ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
-              <span>{generatingQuiz ? 'AI Formulating Quiz...' : 'Generate AI Quiz'}</span>
-            </button>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">MARKS PER Q</label>
+                <input
+                  type="number"
+                  value={quizMarks}
+                  onChange={e => setQuizMarks(Number(e.target.value))}
+                  className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1.5">DIFFICULTY</label>
+                <select
+                  value={quizDifficulty}
+                  onChange={e => setQuizDifficulty(e.target.value)}
+                  className="w-full bg-gray-50/50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-800 focus:outline-none"
+                >
+                  <option value="Beginner">Beginner</option>
+                  <option value="Intermediate">Intermediate</option>
+                  <option value="Advanced">Advanced</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="pt-4 space-y-3">
+              <button
+                type="submit"
+                disabled={generatingQuiz}
+                className="w-full py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 hover:opacity-90 transition-opacity cursor-pointer"
+                style={{ background: 'linear-gradient(135deg, #A855F7, #df4ff0)' }}
+              >
+                <Sparkles className="h-4 w-4" />
+                {generatingQuiz ? 'GENERATING...' : 'Generate AI Quiz'}
+              </button>
+              <p className="text-[10px] text-center text-gray-400 font-medium italic flex items-center justify-center gap-1">
+                <Sparkles className="h-3 w-3" /> AI will curate questions based on topic depth
+              </p>
+            </div>
+            {quizMsg.text && (
+              <p className={`text-xs text-center font-bold mt-2 ${quizMsg.type === 'success' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                {quizMsg.text}
+              </p>
+            )}
           </form>
         </div>
 
-        {/* Right list: Quizzes lists */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="border-b pb-4" style={{ borderColor: 'var(--surface-border)' }}>
-            <h3 className="text-sm font-bold" style={{ color: 'var(--foreground)' }}>
-              Quizzes in {selectedProject?.name || 'Selected Cohort'}
-            </h3>
-            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Control draft/active states, or open live student examinations.</p>
+        {/* Right: Current Quizzes List */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 lg:col-span-2 flex flex-col">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-black text-gray-900">Current Quizzes List</h2>
+            <Link href="#" className="text-xs font-bold text-purple-600 hover:text-purple-800 flex items-center gap-1">
+              View Archive <ChevronRight className="h-3 w-3" />
+            </Link>
           </div>
 
-          {loadingQuizzes ? (
-            <div className="space-y-4">
-              <div className="h-20 skeleton rounded-2xl" />
-              <div className="h-20 skeleton rounded-2xl" />
-            </div>
-          ) : quizzes.length > 0 ? (
-            <div className="space-y-4">
-              {quizzes.map((quiz) => (
-                <div key={quiz._id}
-                  className="glass-card p-5 flex items-center justify-between gap-4 transition-all duration-300 hover:-translate-y-1">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-xs" style={{ color: 'var(--foreground)' }}>{quiz.title}</h4>
-                      <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded"
-                        style={{
-                          background: quiz.status === 'Live' ? 'rgba(16,185,129,0.1)' : 'var(--surface-2)',
-                          color: quiz.status === 'Live' ? '#10b981' : 'var(--text-muted)',
-                          border: `1px solid ${quiz.status === 'Live' ? 'rgba(16,185,129,0.2)' : 'var(--surface-border)'}`
-                        }}>
-                        {quiz.status}
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-left">
+              <thead className="text-[9px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100">
+                <tr>
+                  <th className="pb-3 px-2">QUIZ TITLE</th>
+                  <th className="pb-3 px-2">QUESTIONS</th>
+                  <th className="pb-3 px-2">AVG SCORE</th>
+                  <th className="pb-3 px-2">STATUS</th>
+                  <th className="pb-3 px-2 text-right">ACTION</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {loadingQuizzes ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-gray-400">Loading quizzes...</td>
+                  </tr>
+                ) : filteredQuizzes.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-gray-400">No quizzes found.</td>
+                  </tr>
+                ) : filteredQuizzes.map((quiz) => (
+                  <tr key={quiz._id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="py-4 px-2">
+                      <h4 className="text-sm font-bold text-gray-900 mb-1 leading-tight max-w-[180px]">{quiz.title}</h4>
+                      <span className="inline-block px-2 py-0.5 rounded-full bg-purple-600 text-white text-[9px] font-bold">
+                        {quiz.targetRole || 'Software Engineer'}
                       </span>
-                    </div>
-                    <span className="text-[10px] mt-1.5 block" style={{ color: 'var(--text-faint)' }}>
-                      Duration: {quiz.durationMinutes} minutes | Questions: {quiz.questions?.length || 5} {quiz.avgScore ? `| Avg Grade: ${quiz.avgScore}%` : ''}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    {quiz.status === 'Live' && (
-                      <Link
-                        href={`/quiz-portal/${quiz._id}?projectId=${selectedProjectId}`}
-                        target="_blank"
-                        className="flex items-center gap-1 text-[10px] px-3.5 py-2 rounded-xl font-bold uppercase tracking-wider transition-all"
-                        style={{
-                          background: 'var(--brand-gradient-soft)',
-                          color: 'var(--brand-primary)',
-                          border: '1px solid var(--surface-border)'
-                        }}
-                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, #7c3aed, #d946ef)'; (e.currentTarget as HTMLElement).style.color = 'white'; }}
-                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--brand-gradient-soft)'; (e.currentTarget as HTMLElement).style.color = 'var(--brand-primary)'; }}
+                    </td>
+                    <td className="py-4 px-2">
+                      <p className="text-xs font-semibold text-gray-700">{quiz.questions?.length || 0} Qs /</p>
+                      <p className="text-xs font-semibold text-gray-700">{quiz.durationMinutes} min</p>
+                    </td>
+                    <td className="py-4 px-2">
+                      <div className="flex items-center gap-2">
+                        <div className="h-1 w-12 bg-gray-100 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full rounded-full" 
+                            style={{ 
+                              width: `${quiz.avgScore || 0}%`, 
+                              background: (quiz.avgScore || 0) > 80 ? '#2dd4bf' : (quiz.avgScore || 0) > 60 ? '#c084fc' : '#f43f5e'
+                            }} 
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-gray-900">{quiz.avgScore || 0}%</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-2">
+                      <button 
+                        onClick={() => handleToggleStatus(quiz._id, quiz.status)}
+                        className="flex items-center gap-2 cursor-pointer"
                       >
-                        <span>Live Portal</span>
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Link>
-                    )}
-
-                    <Link
-                      href={`/quiz/${quiz._id}?projectId=${selectedProjectId}`}
-                      className="p-2.5 rounded-xl border transition-colors cursor-pointer flex items-center justify-center bg-blue-500/10 text-blue-600 border-blue-500/20 hover:bg-blue-500/20"
-                      title="View Submissions"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                    </Link>
-
-                    <button
-                      onClick={() => handleToggleQuizStatus(quiz._id, quiz.status)}
-                      className="p-2.5 rounded-xl border transition-colors cursor-pointer"
-                      style={{
-                        background: quiz.status === 'Live' ? 'rgba(245,158,11,0.06)' : 'rgba(16,185,129,0.06)',
-                        borderColor: quiz.status === 'Live' ? 'rgba(245,158,11,0.2)' : 'rgba(16,185,129,0.2)',
-                        color: quiz.status === 'Live' ? '#f59e0b' : '#10b981'
-                      }}
-                    >
-                      {quiz.status === 'Live' ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="h-40 border border-dashed rounded-2xl flex items-center justify-center text-xs text-center p-6"
-              style={{ borderColor: 'var(--surface-border)', color: 'var(--text-faint)' }}>
-              No quizzes created for this cohort yet. Use the prompt generator on the left to start!
-            </div>
-          )}
+                        <div className={`w-8 h-4 rounded-full flex items-center p-0.5 ${quiz.status === 'Live' ? 'bg-emerald-400' : 'bg-gray-200'}`}>
+                          <div className={`h-3 w-3 bg-white rounded-full transition-transform ${quiz.status === 'Live' ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                        <span className={`text-xs font-bold ${quiz.status === 'Live' ? 'text-emerald-500' : 'text-gray-400'}`}>
+                          {quiz.status}
+                        </span>
+                      </button>
+                    </td>
+                    <td className="py-4 px-2 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {quiz.status === 'Live' && (
+                          <button 
+                            onClick={() => copyQuizLink(quiz._id)}
+                            className="text-[10px] font-bold text-gray-500 bg-gray-50 border border-gray-200 hover:bg-gray-100 px-2 py-1.5 rounded-lg transition-colors cursor-pointer flex flex-col items-center justify-center min-w-[70px]"
+                            title="Copy Live Quiz Link"
+                          >
+                            {copiedLink === quiz._id ? <CheckCircle2 className="h-4 w-4 text-emerald-500 mb-0.5" /> : <Copy className="h-4 w-4 mb-0.5" />}
+                            {copiedLink === quiz._id ? 'Copied!' : 'Copy Link'}
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => router.push(`/quiz/${quiz._id}?projectId=${selectedProjectId}`)}
+                          className="text-xs font-bold text-purple-600 hover:bg-purple-50 px-2 py-1.5 rounded-lg transition-colors cursor-pointer text-center"
+                        >
+                          View<br/>Answersheet
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
+
+      {/* ── Recent Quiz Submissions ────────────────────────── */}
+      <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+          <div>
+            <h2 className="text-lg font-black text-gray-900">Recent Quiz Submissions</h2>
+            <p className="text-xs text-gray-500 font-medium mt-0.5">Real-time update of student performance metrics</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-50">
+              <Filter className="h-3.5 w-3.5" /> Filter
+            </button>
+            <button className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-100">
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="text-[9px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-100 bg-gray-50/50">
+              <tr>
+                <th className="py-3 px-4">STUDENT</th>
+                <th className="py-3 px-4">TIMESTAMP</th>
+                <th className="py-3 px-4">QUIZ SCORE</th>
+                <th className="py-3 px-4">RESULT</th>
+                <th className="py-3 px-4 text-right">ACTION</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {recentSubmissions.map((sub: any) => (
+                <tr key={sub._id} className="hover:bg-gray-50/50 transition-colors">
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-bold text-xs">
+                        {sub.student?.name?.charAt(0) || 'S'}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-gray-900">{sub.student?.name}</h4>
+                        <p className="text-[10px] text-gray-500">{sub.student?.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-xs font-medium text-gray-600">
+                    {new Date(sub.createdAt).toLocaleString()}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="text-sm font-black text-purple-700">{sub.score} / {sub.totalQuestions || 20}</span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`px-2.5 py-1 rounded-full text-[9px] font-black tracking-widest uppercase ${
+                      !sub.cheated ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                    }`}>
+                      {!sub.cheated ? 'PASSED' : 'FLAGGED'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <button 
+                      onClick={() => setSelectedStudentSubmission(sub)}
+                      className="text-xs font-bold text-purple-600 bg-purple-50 hover:bg-purple-100 px-4 py-2 rounded-xl transition-colors cursor-pointer"
+                    >
+                      View Answersheet
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {recentSubmissions.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-gray-400">Select a quiz to view recent submissions.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Modals ────────────────────────────────────────── */}
+
+      {/* Detailed Student Answersheet Modal (Based on Screenshot) */}
+      {mounted && selectedStudentSubmission && createPortal(
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 sm:p-6 bg-slate-950/40 backdrop-blur-sm" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <div className="bg-[#F8F9FE] rounded-[32px] shadow-2xl w-full max-w-6xl h-[90vh] relative overflow-hidden flex flex-col md:flex-row">
+            
+            {/* Left Panel */}
+            <div className="w-full md:w-80 bg-transparent p-6 flex flex-col gap-6 overflow-y-auto shrink-0 hidden md:flex">
+              {/* User Card */}
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-purple-100 border-2 border-purple-200 flex items-center justify-center text-purple-700 font-bold text-lg shrink-0">
+                  {selectedStudentSubmission.student?.name?.charAt(0) || 'A'}
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-gray-900">{selectedStudentSubmission.student?.name || 'Alex Thompson'}</h3>
+                  <p className="text-[10px] font-medium text-gray-500 mb-2">{selectedStudentSubmission.student?.email || 'alex.t@university.edu'}</p>
+                  <span className="bg-purple-50 text-purple-600 text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-md">
+                    BATCH 12
+                  </span>
+                </div>
+              </div>
+
+              {/* Score & Time Card */}
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex items-center justify-between">
+                <div className="text-center">
+                  <div className="relative h-20 w-20 mx-auto mb-2">
+                    <svg className="h-20 w-20 transform -rotate-90">
+                      <circle cx="40" cy="40" r="36" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-gray-100" />
+                      <circle cx="40" cy="40" r="36" stroke="currentColor" strokeWidth="6" fill="transparent" 
+                        strokeDasharray={226} 
+                        strokeDashoffset={226 - (226 * (selectedStudentSubmission.score || 16)) / (selectedStudentSubmission.totalQuestions || 20)}
+                        className="text-[#5B21B6]" strokeLinecap="round" 
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-xl font-black text-gray-900">{selectedStudentSubmission.score || 16}<span className="text-xs text-gray-400 font-medium">/{selectedStudentSubmission.totalQuestions || 20}</span></span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    {Math.round(((selectedStudentSubmission.score || 16) / (selectedStudentSubmission.totalQuestions || 20)) * 100)}% ACCURACY
+                  </span>
+                </div>
+                
+                <div className="w-px h-16 bg-gray-100 mx-4"></div>
+
+                <div className="text-center">
+                  <div className="h-10 w-10 rounded-full bg-indigo-50 flex items-center justify-center mx-auto mb-2">
+                    <Clock className="h-5 w-5 text-indigo-500" />
+                  </div>
+                  <span className="text-[10px] font-medium text-gray-400 block mb-0.5">Time Taken</span>
+                  <span className="text-sm font-black text-gray-900">14m 32s</span>
+                </div>
+              </div>
+
+              {/* Question Navigator */}
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex-1">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-6 text-center">QUESTION NAVIGATOR</h4>
+                <div className="grid grid-cols-5 gap-3 mb-6">
+                  {Array.from({ length: selectedStudentSubmission.totalQuestions || 20 }).map((_, i) => {
+                    // Mock data generation for navigator
+                    const isCorrect = i % 4 !== 0; // mostly correct
+                    const isUnattempted = i === 5;
+                    let bgColor = isUnattempted ? 'bg-blue-50 text-blue-600' : isCorrect ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600';
+                    return (
+                      <div key={i} className={`h-10 w-10 rounded-xl flex items-center justify-center text-xs font-black ${bgColor}`}>
+                        {i + 1}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-center gap-4 text-[8px] font-black uppercase tracking-widest">
+                  <div className="flex items-center gap-1.5 text-emerald-600"><div className="h-2 w-2 rounded-full bg-emerald-400"></div> CORRECT</div>
+                  <div className="flex items-center gap-1.5 text-rose-600"><div className="h-2 w-2 rounded-full bg-rose-400"></div> INCORRECT</div>
+                  <div className="flex items-center gap-1.5 text-blue-400"><div className="h-2 w-2 rounded-full bg-blue-300"></div> UNATTEMPTED</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Panel (Details) */}
+            <div className="flex-1 bg-transparent p-6 flex flex-col h-full relative">
+              
+              <button 
+                onClick={() => setSelectedStudentSubmission(null)}
+                className="absolute top-6 right-6 h-10 w-10 bg-white rounded-full shadow-sm flex items-center justify-center text-gray-500 hover:text-gray-900 cursor-pointer z-10"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              {/* Top Filter Bar */}
+              <div className="flex items-center justify-between mb-6 pr-12">
+                <div className="flex items-center gap-2">
+                  <button className="px-5 py-2 rounded-full bg-[#5B21B6] text-white text-xs font-bold">All Questions</button>
+                  <button className="px-5 py-2 rounded-full bg-transparent text-gray-500 hover:text-gray-800 text-xs font-bold transition-colors">Incorrect Only</button>
+                  <button className="px-5 py-2 rounded-full bg-transparent text-gray-500 hover:text-gray-800 text-xs font-bold transition-colors">Marked</button>
+                </div>
+                <div className="relative w-64 hidden sm:block">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input type="text" placeholder="Search question..." className="w-full pl-9 pr-4 py-2.5 rounded-full bg-white border border-gray-100 text-xs focus:outline-none focus:border-purple-200" />
+                </div>
+              </div>
+
+              {/* Scrollable Questions List */}
+              <div className="flex-1 overflow-y-auto space-y-6 pb-20 pr-2 custom-scrollbar">
+                
+                {/* Correct Question Mock */}
+                <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-purple-50 text-[#5B21B6] text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg">Question 01</span>
+                      <span className="bg-gray-100 text-gray-600 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg">Moderate</span>
+                      <span className="bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg">1 Mark</span>
+                    </div>
+                    <button className="text-gray-300 hover:text-gray-500"><Bookmark className="h-5 w-5" /></button>
+                  </div>
+                  <h3 className="text-sm font-bold text-gray-900 mb-6 leading-relaxed">
+                    In a microservices architecture, which component is primarily responsible for routing requests to the appropriate service instance?
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-xl border border-gray-100 text-sm font-medium text-gray-500 flex items-center">
+                      A) Message Broker
+                    </div>
+                    <div className="p-4 rounded-xl border-2 border-emerald-400 bg-emerald-50/30 text-sm font-bold text-emerald-700 flex items-center justify-between">
+                      B) API Gateway
+                      <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                    </div>
+                    <div className="p-4 rounded-xl border border-gray-100 text-sm font-medium text-gray-500 flex items-center">
+                      C) Service Discovery Tool
+                    </div>
+                    <div className="p-4 rounded-xl border border-gray-100 text-sm font-medium text-gray-500 flex items-center">
+                      D) Container Orchestrator
+                    </div>
+                  </div>
+                </div>
+
+                {/* Incorrect Question Mock */}
+                <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-purple-50 text-[#5B21B6] text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg">Question 03</span>
+                      <span className="bg-gray-100 text-gray-600 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg">Hard</span>
+                      <span className="bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg">1 Mark</span>
+                    </div>
+                    <button className="text-purple-600"><Bookmark className="h-5 w-5 fill-current" /></button>
+                  </div>
+                  <h3 className="text-sm font-bold text-gray-900 mb-6 leading-relaxed">
+                    Which of the following ACID properties ensures that a database remains in a valid state after any transaction?
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div className="p-4 rounded-xl border-2 border-rose-300 bg-rose-50/50 text-sm font-bold text-rose-700 flex items-center justify-between">
+                      A) Atomicity
+                      <div className="flex items-center gap-2 text-[9px] uppercase tracking-widest">STUDENT'S CHOICE <X className="h-4 w-4" /></div>
+                    </div>
+                    <div className="p-4 rounded-xl border-2 border-emerald-400 border-dashed bg-transparent text-sm font-bold text-gray-700 flex items-center justify-between">
+                      B) Consistency
+                      <div className="flex items-center gap-2 text-[9px] uppercase tracking-widest text-emerald-600">CORRECT ANSWER</div>
+                    </div>
+                    <div className="p-4 rounded-xl border border-gray-100 text-sm font-medium text-gray-500 flex items-center">
+                      C) Isolation
+                    </div>
+                    <div className="p-4 rounded-xl border border-gray-100 text-sm font-medium text-gray-500 flex items-center">
+                      D) Durability
+                    </div>
+                  </div>
+
+                  {/* AI Answer Breakdown */}
+                  <div className="mt-6 pt-6 border-t border-gray-100">
+                    <div className="flex items-center justify-between mb-4 cursor-pointer">
+                      <h4 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-[#a855f7]">
+                        <Sparkles className="h-4 w-4" /> AI Answer Breakdown
+                      </h4>
+                      <ChevronRight className="h-4 w-4 text-gray-400 rotate-90 transform transition-transform" />
+                    </div>
+                    <div className="bg-purple-50/50 rounded-2xl p-5 border border-purple-100 text-xs font-medium text-gray-600 leading-relaxed space-y-3">
+                      <p>While <strong className="text-gray-900">Atomicity</strong> ensures that a transaction is "all or nothing", <strong className="text-gray-900">Consistency</strong> specifically refers to the database transitioning from one valid state to another, maintaining all predefined rules (constraints, cascades, triggers).</p>
+                      <p>Your choice of Atomicity is a common confusion because failed atomicity can lead to inconsistency, but it is not the property itself.</p>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }

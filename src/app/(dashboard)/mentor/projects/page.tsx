@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { apiRequest } from '@/utils/api';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import {
@@ -39,6 +40,8 @@ interface Project {
 }
 
 export default function ProjectsIndexPage() {
+  const pathname = usePathname();
+  const prefix = pathname?.startsWith('/admin') ? '/admin' : '/mentor';
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,62 +105,11 @@ export default function ProjectsIndexPage() {
         totalActive: totalStudents - totalHired,
       });
     } catch (err: any) {
-      loadMockProjects();
+      console.error('Failed to load dashboard data:', err);
     } finally {
       setLoading(false);
     }
   };
-
-  const loadMockProjects = () => {
-    const mockProjects: Project[] = [
-      {
-        _id: 'proj-1',
-        name: 'Web Development',
-        batch: 'BATCH #2024-A',
-        description:
-          'Comprehensive full-stack program focusing on Next.js, TypeScript, and modern AI integration...',
-        totalStudents: 320,
-        avgAttendanceRate: 82,
-        totalHired: 262,
-        status: 'Active',
-        startedDate: 'Jan 15, 2024',
-      },
-      {
-        _id: 'proj-2',
-        name: 'Data Science',
-        batch: 'BATCH #2024-D',
-        description:
-          'Advanced analytics, machine learning modeling, and big data processing using Python and Spark.',
-        totalStudents: 185,
-        avgAttendanceRate: 65,
-        totalHired: 120,
-        status: 'Active',
-        startedDate: 'Apr 01, 2024',
-      },
-      {
-        _id: 'proj-3',
-        name: 'UI/UX Design Masterclass',
-        batch: 'BATCH #2024-C',
-        description:
-          'Premium project exploring typography, design systems, and wireframing with Figma.',
-        totalStudents: 50,
-        avgAttendanceRate: 95,
-        totalHired: 49,
-        status: 'Completed',
-        startedDate: 'Dec 20, 2023',
-      },
-    ];
-
-    setProjects(mockProjects);
-    setStats({
-      totalProjects: mockProjects.length,
-      totalStudents: 1500,
-      totalHired: 431,
-      placementRate: '78%',
-      totalActive: 1200,
-    });
-  };
-
   const formatRows = (rows: any[]) =>
     rows.map((row: any) => ({
       name:
@@ -373,10 +325,10 @@ export default function ProjectsIndexPage() {
             <div className="h-9 w-9 rounded-xl bg-purple-50 flex items-center justify-center">
               <Briefcase className="h-4.5 w-4.5 text-purple-600" />
             </div>
-            <span className="text-xs font-bold text-emerald-500">+2 new</span>
+            <span className="text-xs font-bold text-emerald-500">+0 new</span>
           </div>
           <p className="text-xs text-gray-400 font-semibold mt-1">Active Batches</p>
-          <p className="text-2xl font-black text-gray-900">{stats.totalProjects || 25}</p>
+          <p className="text-2xl font-black text-gray-900">{stats.totalProjects}</p>
         </div>
 
         {/* Total Enrolled */}
@@ -388,7 +340,7 @@ export default function ProjectsIndexPage() {
             <span className="text-xs font-bold text-purple-500">Overall</span>
           </div>
           <p className="text-xs text-gray-400 font-semibold mt-1">Total Enrolled Students</p>
-          <p className="text-2xl font-black text-gray-900">{stats.totalStudents.toLocaleString() || '1,500'}</p>
+          <p className="text-2xl font-black text-gray-900">{stats.totalStudents.toLocaleString()}</p>
         </div>
 
         {/* Placed Ratio */}
@@ -400,7 +352,7 @@ export default function ProjectsIndexPage() {
             <span className="text-xs font-bold text-yellow-500">Target 85%</span>
           </div>
           <p className="text-xs text-gray-400 font-semibold mt-1">Placed Ratio</p>
-          <p className="text-2xl font-black text-gray-900">{stats.placementRate || '78%'}</p>
+          <p className="text-2xl font-black text-gray-900">{stats.placementRate}</p>
         </div>
 
         {/* Active Enrolled */}
@@ -412,7 +364,7 @@ export default function ProjectsIndexPage() {
             <span className="text-xs font-bold text-purple-500">Active</span>
           </div>
           <p className="text-xs text-gray-400 font-semibold mt-1">Active Enrolled</p>
-          <p className="text-2xl font-black text-gray-900">{stats.totalActive.toLocaleString() || '1,200'}</p>
+          <p className="text-2xl font-black text-gray-900">{stats.totalActive?.toLocaleString() || 0}</p>
         </div>
       </div>
 
@@ -574,7 +526,7 @@ export default function ProjectsIndexPage() {
 
                   {/* Link */}
                   <Link
-                    href={`/projects/${project._id}`}
+                    href={`${prefix}/projects/${project._id}`}
                     className="text-xs font-black text-purple-600 hover:text-purple-800 flex items-center gap-1 self-end transition-colors"
                   >
                     Manage Project
@@ -635,11 +587,10 @@ export default function ProjectsIndexPage() {
                   <span className={`h-1.5 w-1.5 rounded-full ${isCompleted ? 'bg-blue-500' : 'bg-emerald-500 animate-pulse'}`} />
                   {isCompleted ? 'Completed' : 'Active'}
                 </span>
-                <Link
-                  href={`/projects/${project._id}`}
-                  className="shrink-0 text-xs font-black text-purple-600 hover:text-purple-800 flex items-center gap-1 transition-colors"
-                >
-                  Manage <ChevronRight className="h-3.5 w-3.5" />
+                  <Link
+                    href={`${prefix}/projects/${project._id}`}
+                    className="flex items-center justify-center gap-1.5 w-full bg-gray-50 hover:bg-purple-50 text-gray-700 hover:text-purple-700 font-bold text-xs py-2 rounded-xl transition-colors border border-gray-100 hover:border-purple-200"
+                  >Manage <ChevronRight className="h-3.5 w-3.5" />
                 </Link>
               </div>
             );

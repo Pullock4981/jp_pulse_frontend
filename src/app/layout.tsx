@@ -17,9 +17,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Placement Pulse — Cohort & Placement Tracker",
-  description: "The premium AI-powered placement management platform for tracking cohort progress, attendance, quizzes, and student placement.",
-  keywords: ["placement", "cohort", "tracker", "mentor", "students"],
+  title: "Placement Pulse — Project & Placement Tracker",
+  description: "The premium AI-powered placement management platform for tracking project progress, attendance, quizzes, and student placement.",
+  keywords: ["placement", "project", "tracker", "mentor", "students"],
 };
 
 export default function RootLayout({
@@ -40,20 +40,14 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
-                  const saved = localStorage.getItem('theme');
-                  const preferred = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-                  if (preferred === 'dark') {
-                    document.documentElement.classList.add('dark');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                  }
+                  document.documentElement.classList.remove('dark');
                 } catch (e) {}
               })();
             `
           }}
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>{children}</body>
     </html>
   );
 }

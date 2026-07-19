@@ -2,17 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import {
-  LayoutDashboard,
-  FolderKanban,
-  Trophy,
-  Sparkles,
-  LogOut,
-  User,
-  BookOpen,
-  ShieldCheck,
-  Zap,
-  ChevronRight
+import { useState } from 'react';
+import { 
+  User, LogOut, LayoutDashboard, FolderKanban, 
+  FileCheck2, Sparkles, Trophy, Shield
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -24,16 +17,22 @@ export default function Sidebar({ userRole = 'mentor', userName = 'Mentor' }: Si
   const pathname = usePathname();
   const router = useRouter();
 
+  const prefix = userRole === 'admin' ? '/admin' : '/mentor';
+
   const navItems = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard, desc: 'Overview & stats' },
-    { name: 'Projects', href: '/projects', icon: FolderKanban, desc: 'Batch management' },
-    { name: 'Quiz System', href: '/quiz', icon: BookOpen, desc: 'Assessments' },
-    { name: 'Placement AI', href: '/placement', icon: Sparkles, desc: 'AI insights' },
+    { name: 'Dashboard', href: userRole === 'admin' ? '/' : '/mentor', icon: LayoutDashboard },
   ];
 
   if (userRole === 'admin') {
-    navItems.push({ name: 'Admin Panel', href: '/admin', icon: ShieldCheck, desc: 'System control' });
+    navItems.push({ name: 'Admin Panel', href: '/admin', icon: Shield });
   }
+
+  navItems.push(
+    { name: 'Projects', href: `${prefix}/projects`, icon: FolderKanban },
+    { name: 'Quiz System', href: `${prefix}/quiz`, icon: FileCheck2 },
+    { name: 'Placement AI', href: `${prefix}/placement`, icon: Sparkles },
+    { name: 'Leaderboard', href: `${prefix}/leaderboard`, icon: Trophy }
+  );
 
   const handleLogout = () => {
     sessionStorage.removeItem('token');
@@ -41,123 +40,72 @@ export default function Sidebar({ userRole = 'mentor', userName = 'Mentor' }: Si
     router.push('/login');
   };
 
-  const initials = userName
-    ? userName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-    : 'U';
-
   return (
-    <aside className="w-64 shrink-0 h-screen sticky top-0 z-50 flex flex-col"
-      style={{
-        background: 'var(--surface-1)',
-        borderRight: '1px solid var(--surface-border)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
-      }}
-    >
-      {/* ── Brand Logo ─────────────────────────────── */}
-      <div className="p-5 border-b flex items-center gap-3" style={{ borderColor: 'var(--surface-border)' }}>
-        <div className="relative h-10 w-10 shrink-0">
-          <div className="h-10 w-10 rounded-2xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #d946ef)' }}
-          >
-            <Zap className="h-5 w-5 text-white" fill="white" />
+    <aside className="w-64 shrink-0 h-screen sticky top-0 z-50 flex py-4 pl-4 pr-0">
+      
+      {/* Outer White Wrapper */}
+      <div className="w-full h-full bg-white rounded-l-[40px] rounded-r-none flex py-3 pl-3 shadow-[10px_0_30px_rgba(0,0,0,0.02)]">
+        
+        {/* Inner Purple Container */}
+        <div className="w-full h-full bg-[#5B21B6] rounded-l-[32px] rounded-r-none flex flex-col relative overflow-hidden">
+          
+          {/* Logo Area */}
+          <div className="flex flex-col items-center justify-center pt-10 pb-12 relative z-20">
+            <div className="relative flex items-center justify-center w-14 h-14 rounded-full border border-white/20 mb-2">
+              <svg className="w-8 h-8 text-white" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="24" r="8.5" fill="white" />
+                <path d="M26 45C33 42.5 41.5 46.5 50 46.5C58.5 46.5 67 42.5 74 45C78.5 46.5 80 50.5 80 54.5V57H20V54.5C20 50.5 21.5 46.5 26 45Z" fill="white" opacity="0.25" />
+                <path d="M18 70C28 64 42 64 50 70C58 64 72 64 82 70V46C72 40 58 40 50 46C42 40 28 40 18 46Z" fill="white" stroke="white" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+                <line x1="50" y1="46" x2="50" y2="70" stroke="white" strokeWidth="4.5" strokeLinecap="round" />
+              </svg>
+            </div>
           </div>
-          {/* Glow ring */}
-          <div className="absolute inset-0 rounded-2xl opacity-40 blur-md"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #d946ef)', zIndex: -1 }}
-          />
-        </div>
-        <div className="min-w-0">
-          <h1 className="font-extrabold text-sm leading-tight tracking-tight" style={{ color: 'var(--foreground)' }}>
-            Placement Pulse
-          </h1>
-          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--brand-primary)' }}>
-            Cohort Tracker
-          </span>
-        </div>
-      </div>
 
-      {/* ── Navigation ─────────────────────────────── */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        <p className="text-[9px] font-black uppercase tracking-widest px-3 py-2 mt-1 mb-1"
-          style={{ color: 'var(--text-faint)' }}>
-          Navigation
-        </p>
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href + '/')) || (item.href !== '/' && pathname === item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className="group flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold transition-all duration-200 relative"
-              style={{
-                color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)',
-                background: isActive ? 'var(--brand-gradient-soft)' : 'transparent',
-                borderLeft: isActive ? '3px solid var(--brand-primary)' : '3px solid transparent',
-              }}
+          {/* Navigation Links */}
+          <nav className="flex-1 flex flex-col gap-2 overflow-y-auto w-full relative z-20">
+            {navItems.map((item) => {
+              const isActive = item.href === '/' || item.href === '/mentor' || item.href === '/admin'
+                ? pathname === item.href
+                : pathname.startsWith(item.href);
+
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`group w-[calc(100%-12px)] ml-auto py-3.5 pl-6 block text-sm font-bold transition-all duration-300 relative ${
+                    isActive 
+                      ? 'sidebar-active-item text-[#5B21B6]' 
+                      : 'text-white/70 hover:text-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <item.icon className={`h-5 w-5 ${isActive ? 'text-[#5B21B6]' : ''}`} />
+                    <span>{item.name}</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* User Profile & Logout */}
+          <div className="mt-auto mb-6 flex flex-col items-center px-4 w-full relative z-20">
+            <div className="flex flex-col items-center justify-center mb-6 text-center border-t border-white/10 pt-6 w-full">
+              <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center mb-2">
+                <User className="h-5 w-5 text-white/80" />
+              </div>
+              <p className="text-white font-bold text-sm truncate max-w-[150px]">{userName}</p>
+              <p className="text-white/50 text-xs mt-0.5 capitalize">{userRole}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-white/70 hover:text-white text-xs font-bold transition-colors justify-center py-2"
             >
-              <div className={`h-8 w-8 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0 ${isActive ? '' : 'group-hover:scale-110'
-                }`}
-                style={{
-                  background: isActive
-                    ? 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(217,70,239,0.15))'
-                    : 'transparent',
-                  color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)',
-                }}
-              >
-                <Icon className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <span className="block text-xs font-bold">{item.name}</span>
-                <span className="block text-[10px] font-medium opacity-70">{item.desc}</span>
-              </div>
-              {isActive && (
-                <ChevronRight className="h-3 w-3 shrink-0" style={{ color: 'var(--brand-primary)' }} />
-              )}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* ── User Profile Footer ─────────────────────── */}
-      <div className="p-3 border-t space-y-2" style={{ borderColor: 'var(--surface-border)' }}>
-        {/* User card */}
-        <div className="flex items-center gap-3 px-3 py-3 rounded-xl"
-          style={{ background: 'var(--surface-2)', border: '1px solid var(--surface-border)' }}
-        >
-          <div className="h-9 w-9 rounded-xl flex items-center justify-center font-extrabold text-sm shrink-0 text-white"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #d946ef)' }}
-          >
-            {initials}
+              <LogOut className="h-4 w-4" />
+              Logout
+            </button>
           </div>
-          <div className="min-w-0 flex-1">
-            <h4 className="text-xs font-bold truncate" style={{ color: 'var(--foreground)' }}>{userName}</h4>
-            <span className="text-[9px] font-black uppercase tracking-widest capitalize"
-              style={{ color: 'var(--brand-primary)' }}>
-              {userRole}
-            </span>
-          </div>
-          {/* Online indicator */}
-          <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          
         </div>
-
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer"
-          style={{ color: 'var(--text-muted)' }}
-          onMouseEnter={e => {
-            e.currentTarget.style.color = '#f43f5e';
-            e.currentTarget.style.background = 'rgba(244,63,94,0.08)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.color = 'var(--text-muted)';
-            e.currentTarget.style.background = 'transparent';
-          }}
-        >
-          <LogOut className="h-4 w-4" />
-          Sign Out
-        </button>
       </div>
     </aside>
   );
